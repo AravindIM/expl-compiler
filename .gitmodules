@@ -1,0 +1,3 @@
+[submodule "xsm_expl"]
+	path = xsm_expl
+	url = https://github.com/spectraxmachina/xsm_expl
