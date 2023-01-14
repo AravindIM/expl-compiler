@@ -1,9 +1,17 @@
 %%
+begin "BEGIN"
+end "END"
+; "ENDSTMT"
+= "ASG"
+[a-z] "ID"
 [0-9]+ "NUM"
+read "READ"
+write "WRITE"
 / "DIV"
 \* "MUL"
 \+ "ADD"
 \- "SUB"
 \( "("
 \) ")"
-[\t\n\r]+ ;
+[\s]+ ;
+. "UNMATCHED"
