@@ -99,4 +99,4 @@ Unmatched -> ():
              ;
 %%
 // Any functions here are in scope for all the grammar actions above.
-use compiler::*;
+use compiler::tnode::{Tnode, Id, Op};

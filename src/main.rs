@@ -1,12 +1,12 @@
 use std::{env, fs, process};
+use compiler::generator::code_gen;
+use compiler::utils::fetch_filenames;
 
 use lrlex::lrlex_mod;
 use lrpar::lrpar_mod;
 
 lrlex_mod!("lex.l");
 lrpar_mod!("yacc.y");
-
-use compiler::*;
 
 fn main() {
     let lexerdef = lex_l::lexerdef();
