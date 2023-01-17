@@ -5,7 +5,7 @@
 /* %epp MUL "*" */
 /* %epp DIV "/" */
 
-%token "BEGIN" "END" "ENDSTMT" "ID" "ASG" "READ" "WRITE" "NUM" "IF" "THEN" "ELSE" "ENDIF" "WHILE" "DO" "ENDWHILE" "(" ")" "UNMATCHED"
+%token "BEGIN" "END" "ENDSTMT" "ID" "ASG" "READ" "WRITE" "NUM" "IF" "THEN" "ELSE" "ENDIF" "WHILE" "DO" "ENDWHILE" "BREAK" "CONTINUE" "(" ")" "UNMATCHED"
 %nonassoc "LE" "GE" "NE" "EQ" "LT" "GT"
 %left "ADD" "SUB"
 %left "MUL" "DIV"
@@ -30,15 +30,17 @@ Stmt -> Result<Tnode, ()>:
       | WhileStmt { $1 }
       | DoWhileStmt { $1 }
       | RepeatUntilStmt { $1 }
+      | ContinueStmt { $1 }
+      | BreakStmt { $1 }
       ;
 
 InputStmt -> Result<Tnode, ()>:
              "READ" "(" Id ")" "ENDSTMT" { Ok( Tnode::Read{ id: Box::new($3?) } ) }
-            ;
+             ;
 
 OutputStmt -> Result<Tnode, ()>:
               "WRITE" "(" Expr ")" "ENDSTMT" { Ok( Tnode::Write{ expr: Box::new($3?) } ) }
-             ;
+              ;
 
 AsgStmt -> Result<Tnode, ()>:
            Id "ASG" Expr "ENDSTMT" { Ok( Tnode::AsgStmt{ id: Box::new($1?), expr: Box::new($3?)} ) }
@@ -51,15 +53,23 @@ IfStmt -> Result<Tnode, ()>:
 
 WhileStmt -> Result<Tnode, ()>:
              "WHILE" "(" BoolExpr ")" "DO" Slist "ENDWHILE" "ENDSTMT" { Ok( Tnode::WhileStmt{ bool_expr: Box::new($3?), slist: Box::new($6?) } ) }
-            ;
+             ;
 
 DoWhileStmt -> Result<Tnode, ()>:
-            "DO" Slist "WHILE" "(" BoolExpr ")"  "ENDSTMT" { Ok( Tnode::DoWhileStmt{ bool_expr: Box::new($5?), slist: Box::new($2?) } ) }
-            ;
+               "DO" Slist "WHILE" "(" BoolExpr ")"  "ENDSTMT" { Ok( Tnode::DoWhileStmt{ bool_expr: Box::new($5?), slist: Box::new($2?) } ) }
+               ;
 
 RepeatUntilStmt -> Result<Tnode, ()>:
             "REPEAT" Slist "UNTIL" "(" BoolExpr ")"  "ENDSTMT" { Ok( Tnode::RepeatUntilStmt{ bool_expr: Box::new($5?), slist: Box::new($2?) } ) }
             ;
+
+ContinueStmt -> Result<Tnode, ()>:
+                "CONTINUE" "ENDSTMT" { Ok ( Tnode::ContinueStmt ) }
+                ;
+
+BreakStmt -> Result<Tnode, ()>:
+                "BREAK" "ENDSTMT" { Ok ( Tnode::BreakStmt ) }
+                ;
 
 Expr -> Result<Tnode, ()>:
         "(" Expr ")" { $2 }

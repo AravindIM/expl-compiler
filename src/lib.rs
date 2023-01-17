@@ -79,6 +79,8 @@ pub enum Tnode {
         bool_expr: Box<Tnode>,
         slist: Box<Tnode>,
     },
+    ContinueStmt,
+    BreakStmt,
 }
 
 struct RegPool {
@@ -124,7 +126,7 @@ pub struct LabelManager {
     current_insert: usize,
     current_map: usize,
     label_map: HashMap<String, usize>,
-    label_stack: Vec<usize>
+    label_stack: Vec<usize>,
 }
 
 impl LabelManager {
@@ -140,12 +142,17 @@ impl LabelManager {
     fn get_free_label(&mut self) -> usize {
         let label = self.current_insert;
         self.current_insert += 1;
-        self.label_stack.push(label);
         label
     }
-    
+
+    fn push_label(&mut self, label: usize) {
+        self.label_stack.push(label);
+    }
+
     fn pop_label(&mut self) -> Result<usize, Box<dyn Error>> {
-        self.label_stack.pop().ok_or(Box::<dyn Error>::from("ERROR: Label stack is empty!"))
+        self.label_stack
+            .pop()
+            .ok_or(Box::<dyn Error>::from("ERROR: Label stack is empty!"))
     }
 
     fn generate_label_map(&mut self, object_code: &str) -> Result<(), Box<dyn Error>> {
@@ -357,13 +364,16 @@ fn ast_to_code(
         }
         Tnode::WhileStmt { bool_expr, slist } => {
             let while_start_label = labelmanager.get_free_label();
+            labelmanager.push_label(while_start_label);
+
+            let while_end_label = labelmanager.get_free_label();
+            labelmanager.push_label(while_end_label);
+
             writeln!(object_file, "L{}:", while_start_label)?;
 
             if let Some(bool_reg) =
                 ast_to_code(lexer, *bool_expr, regpool, labelmanager, object_file)?
             {
-                let while_end_label = labelmanager.get_free_label();
-
                 writeln!(object_file, "JZ R{}, L{}", bool_reg, while_end_label)?;
 
                 regpool.set_free(bool_reg);
@@ -376,43 +386,75 @@ fn ast_to_code(
 
                 return Ok(None);
             }
+            labelmanager.pop_label()?;
+            labelmanager.pop_label()?;
             return Err("ERROR: while() has invalid argument".into());
         }
         Tnode::DoWhileStmt { bool_expr, slist } => {
-            let do_label = labelmanager.get_free_label();
+            let do_start_label = labelmanager.get_free_label();
+            labelmanager.push_label(do_start_label);
 
-            writeln!(object_file, "L{}:", do_label)?;
+            let do_end_label = labelmanager.get_free_label();
+            labelmanager.push_label(do_end_label);
+
+            writeln!(object_file, "L{}:", do_start_label)?;
 
             ast_to_code(lexer, *slist, regpool, labelmanager, object_file)?;
 
             if let Some(bool_reg) =
                 ast_to_code(lexer, *bool_expr, regpool, labelmanager, object_file)?
             {
-                writeln!(object_file, "JNZ R{}, L{}", bool_reg, do_label)?;
+                writeln!(object_file, "JNZ R{}, L{}", bool_reg, do_start_label)?;
+                writeln!(object_file, "L{}:", do_end_label)?;
 
                 regpool.set_free(bool_reg);
 
                 return Ok(None);
             }
+            labelmanager.pop_label()?;
+            labelmanager.pop_label()?;
             return Err("ERROR: do-while() has invalid argument".into());
         }
         Tnode::RepeatUntilStmt { bool_expr, slist } => {
-            let do_label = labelmanager.get_free_label();
+            let repeat_start_label = labelmanager.get_free_label();
+            labelmanager.push_label(repeat_start_label);
 
-            writeln!(object_file, "L{}:", do_label)?;
+            let repeat_end_label = labelmanager.get_free_label();
+            labelmanager.push_label(repeat_end_label);
+
+            writeln!(object_file, "L{}:", repeat_start_label)?;
 
             ast_to_code(lexer, *slist, regpool, labelmanager, object_file)?;
 
             if let Some(bool_reg) =
                 ast_to_code(lexer, *bool_expr, regpool, labelmanager, object_file)?
             {
-                writeln!(object_file, "JZ R{}, L{}", bool_reg, do_label)?;
+                writeln!(object_file, "JZ R{}, L{}", bool_reg, repeat_start_label)?;
+                writeln!(object_file, "L{}:", repeat_end_label)?;
 
                 regpool.set_free(bool_reg);
 
                 return Ok(None);
             }
+            labelmanager.pop_label()?;
+            labelmanager.pop_label()?;
             return Err("ERROR: repeat-until() has invalid argument".into());
+        }
+        Tnode::ContinueStmt => {
+            let loop_end_label = labelmanager.pop_label()?;
+            let loop_start_label = labelmanager.pop_label()?;
+            writeln!(object_file, "JMP L{}", loop_start_label)?;
+            labelmanager.push_label(loop_start_label);
+            labelmanager.push_label(loop_end_label);
+            Ok(None)
+        }
+        Tnode::BreakStmt => {
+            let loop_end_label = labelmanager.pop_label()?;
+            let loop_start_label = labelmanager.pop_label()?;
+            writeln!(object_file, "JMP L{}", loop_end_label)?;
+            labelmanager.push_label(loop_start_label);
+            labelmanager.push_label(loop_end_label);
+            Ok(None)
         }
         Tnode::Id(var) => {
             // let id = var.name;
