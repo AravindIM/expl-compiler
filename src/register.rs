@@ -16,7 +16,7 @@ impl RegPool {
             .pool
             .iter()
             .position(|&x| x == false)
-            .ok_or(Box::<dyn Error>::from("ERROR: No set_free registers"))?;
+            .ok_or(Box::<dyn Error>::from("ERROR: No free registers!"))?;
         self.pool[reg] = true;
         Ok(reg)
     }

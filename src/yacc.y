@@ -77,7 +77,7 @@ Expr -> Result<Tnode, ()>:
       |	Expr "MUL" Expr { Ok( Tnode::Op( Op::Mul{ lhs: Box::new($1?), rhs: Box::new($3?)} ) ) }
       |	Expr "ADD" Expr { Ok( Tnode::Op( Op::Add{ lhs: Box::new($1?), rhs: Box::new($3?)} ) ) }
       |	Expr "SUB" Expr { Ok( Tnode::Op( Op::Sub{ lhs: Box::new($1?), rhs: Box::new($3?)} ) ) }
-      | "NUM" { Ok( Tnode::Num{ value: $lexer.span_str($1.as_ref().unwrap().span()).parse::<i32>().expect("Invalid number") } ) }
+      | "NUM" { Ok( Tnode::Num{ value: $lexer.span_str($1.as_ref().unwrap().span()).parse::<i32>().expect("ERROR: Invalid integer!") } ) }
       | Id { $1 }
       ;
 

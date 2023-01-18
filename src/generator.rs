@@ -59,7 +59,7 @@ pub fn code_gen(
     )?;
     write_tail(&mut object_file)?;
     let object_code =
-        fs::read_to_string(&object_filename).expect("ERROR: Unable to read object file {filename}");
+        fs::read_to_string(&object_filename).expect(&format!("ERROR: Unable to read object file {}!", &filename));
     labelmanager.generate_label_map(&object_code)?;
     let exec_code = labelmanager.translate_label(&object_code)?;
     write!(exec_file, "{}", exec_code)?;
@@ -110,7 +110,7 @@ fn ast_to_code(
                 }
                 return Ok(None);
             }
-            return Err("ERROR: read() has invalid argument".into());
+            return Err("ERROR: read() has invalid argument!".into());
         }
         Tnode::Write { expr } => {
             if let Some(reg1) = ast_to_code(lexer, *expr, regpool, labelmanager, object_file)? {
@@ -139,7 +139,7 @@ fn ast_to_code(
                 }
                 return Ok(None);
             }
-            return Err("ERROR: write() has invalid argument".into());
+            return Err("ERROR: write() has invalid argument!".into());
         }
         Tnode::AsgStmt { id, expr } => {
             if let Tnode::Id(var) = *id {
@@ -209,7 +209,7 @@ fn ast_to_code(
             }
             labelmanager.pop_label()?;
             labelmanager.pop_label()?;
-            return Err("ERROR: while() has invalid argument".into());
+            return Err("ERROR: while() has invalid argument!".into());
         }
         Tnode::DoWhileStmt { bool_expr, slist } => {
             let do_start_label = labelmanager.get_free_label();
@@ -234,7 +234,7 @@ fn ast_to_code(
             }
             labelmanager.pop_label()?;
             labelmanager.pop_label()?;
-            return Err("ERROR: do-while() has invalid argument".into());
+            return Err("ERROR: do-while() has invalid argument!".into());
         }
         Tnode::RepeatUntilStmt { bool_expr, slist } => {
             let repeat_start_label = labelmanager.get_free_label();
@@ -259,7 +259,7 @@ fn ast_to_code(
             }
             labelmanager.pop_label()?;
             labelmanager.pop_label()?;
-            return Err("ERROR: repeat-until() has invalid argument".into());
+            return Err("ERROR: repeat-until() has invalid argument!".into());
         }
         Tnode::ContinueStmt => {
             let loop_end_label = labelmanager.pop_label()?;
@@ -298,7 +298,7 @@ fn ast_to_code(
                         return Ok(Some(reg1));
                     }
                 }
-                return Err("ERROR: Operator / has mismatching operands".into());
+                return Err("ERROR: Operator / has mismatching operands!".into());
             }
             Op::Mul { lhs, rhs } => {
                 if let Some(reg1) = ast_to_code(lexer, *lhs, regpool, labelmanager, object_file)? {
@@ -310,7 +310,7 @@ fn ast_to_code(
                         return Ok(Some(reg1));
                     }
                 }
-                return Err("ERROR: Operator * has mismatching operands".into());
+                return Err("ERROR: Operator * has mismatching operands!".into());
             }
             Op::Add { lhs, rhs } => {
                 if let Some(reg1) = ast_to_code(lexer, *lhs, regpool, labelmanager, object_file)? {
@@ -322,7 +322,7 @@ fn ast_to_code(
                         return Ok(Some(reg1));
                     }
                 }
-                return Err("ERROR: Operator + has mismatching operands".into());
+                return Err("ERROR: Operator + has mismatching operands!".into());
             }
             Op::Sub { lhs, rhs } => {
                 if let Some(reg1) = ast_to_code(lexer, *lhs, regpool, labelmanager, object_file)? {
@@ -334,7 +334,7 @@ fn ast_to_code(
                         return Ok(Some(reg1));
                     }
                 }
-                return Err("ERROR: Operator - has mismatching operands".into());
+                return Err("ERROR: Operator - has mismatching operands!".into());
             }
             Op::LEq { lhs, rhs } => {
                 if let Some(reg1) = ast_to_code(lexer, *lhs, regpool, labelmanager, object_file)? {
@@ -346,7 +346,7 @@ fn ast_to_code(
                         return Ok(Some(reg1));
                     }
                 }
-                return Err("ERROR: Operator <= has mismatching operands".into());
+                return Err("ERROR: Operator <= has mismatching operands!".into());
             }
             Op::GEq { lhs, rhs } => {
                 if let Some(reg1) = ast_to_code(lexer, *lhs, regpool, labelmanager, object_file)? {
@@ -358,7 +358,7 @@ fn ast_to_code(
                         return Ok(Some(reg1));
                     }
                 }
-                return Err("ERROR: Operator >= has mismatching operands".into());
+                return Err("ERROR: Operator >= has mismatching operands!".into());
             }
             Op::Eq { lhs, rhs } => {
                 if let Some(reg1) = ast_to_code(lexer, *lhs, regpool, labelmanager, object_file)? {
@@ -370,7 +370,7 @@ fn ast_to_code(
                         return Ok(Some(reg1));
                     }
                 }
-                return Err("ERROR: Operator == has mismatching operands".into());
+                return Err("ERROR: Operator == has mismatching operands!".into());
             }
             Op::NEq { lhs, rhs } => {
                 if let Some(reg1) = ast_to_code(lexer, *lhs, regpool, labelmanager, object_file)? {
@@ -382,7 +382,7 @@ fn ast_to_code(
                         return Ok(Some(reg1));
                     }
                 }
-                return Err("ERROR: Operator != has mismatching operands".into());
+                return Err("ERROR: Operator != has mismatching operands!".into());
             }
             Op::Lt { lhs, rhs } => {
                 if let Some(reg1) = ast_to_code(lexer, *lhs, regpool, labelmanager, object_file)? {
@@ -394,7 +394,7 @@ fn ast_to_code(
                         return Ok(Some(reg1));
                     }
                 }
-                return Err("ERROR: Operator < has mismatching operands".into());
+                return Err("ERROR: Operator < has mismatching operands!".into());
             }
             Op::Gt { lhs, rhs } => {
                 if let Some(reg1) = ast_to_code(lexer, *lhs, regpool, labelmanager, object_file)? {
@@ -406,7 +406,7 @@ fn ast_to_code(
                         return Ok(Some(reg1));
                     }
                 }
-                return Err("ERROR: Operator > has mismatching operands".into());
+                return Err("ERROR: Operator > has mismatching operands!".into());
             }
         },
         Tnode::Num { value } => {

@@ -11,7 +11,7 @@ impl Id {
             .name
             .chars()
             .nth(0)
-            .ok_or(Box::<dyn Error>::from("ERROR: Invalid variable"))? as u32
+            .ok_or(Box::<dyn Error>::from("ERROR: Invalid variable!"))? as u32
             - 'a' as u32
             + 4096)
     }
