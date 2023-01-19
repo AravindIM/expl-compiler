@@ -33,6 +33,6 @@ fn main() {
     }
 
     if let Some(Ok(node)) = res {
-        code_gen(&lexer, node, &output_file).expect("ERROR: Code generation halted!");
+        code_gen(&lexer, &node, &output_file).expect("ERROR: Code generation halted!");
     }
 }
