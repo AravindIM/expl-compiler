@@ -12,17 +12,17 @@
 
 %%
 
-Prog -> Result<Tnode, Box<dyn Error>>:
+Prog -> Result<Tnode, ParseError>:
         "BEGIN" Slist "END" { $2 }
       | "BEGIN" "END" { Ok( Tnode::NullProg ) }
       ;
 
-Slist -> Result<Tnode, Box<dyn Error>>:
+Slist -> Result<Tnode, ParseError>:
         Slist Stmt { Ok( Tnode::Connector{ lhs: Box::new($1?), rhs: Box::new($2?) } ) }
       | Stmt { $1 }
       ;
 
-Stmt -> Result<Tnode, Box<dyn Error>>:
+Stmt -> Result<Tnode, ParseError>:
         InputStmt { $1 }
       | OutputStmt { $1 }
       | AsgStmt { $1 }
@@ -34,61 +34,61 @@ Stmt -> Result<Tnode, Box<dyn Error>>:
       | BreakStmt { $1 }
       ;
 
-InputStmt -> Result<Tnode, Box<dyn Error>>:
-             "READ" "(" Id ")" "ENDSTMT" { Ok( Tnode::Read{ id: Box::new($3?) } ) }
+InputStmt -> Result<Tnode, ParseError>:
+             "READ" "(" Id ")" "ENDSTMT" { Tnode::create_read_node($span, $3?) }
              ;
 
-OutputStmt -> Result<Tnode, Box<dyn Error>>:
-              "WRITE" "(" Expr ")" "ENDSTMT" { Ok( Tnode::Write{ expr: Box::new($3?) } ) }
+OutputStmt -> Result<Tnode, ParseError>:
+              "WRITE" "(" Expr ")" "ENDSTMT" { Tnode::create_write_node($span, $3?) }
               ;
 
-AsgStmt -> Result<Tnode, Box<dyn Error>>:
-           Id "ASG" Expr "ENDSTMT" { Tnode::create_assign_node(&mut $1?, $3?) }
+AsgStmt -> Result<Tnode, ParseError>:
+           Id "ASG" Expr "ENDSTMT" { Tnode::create_assign_node($span, $1?, $3?) }
            ;
 
-IfStmt -> Result<Tnode, Box<dyn Error>>:
-          "IF" "(" Expr ")" "THEN" Slist "ELSE" Slist "ENDIF" "ENDSTMT" { Tnode::create_flow_node(FlowType::If, Some(vec![$3?]), Some(vec![$6?, $8?])) }
-          | "IF" "(" Expr ")" "THEN" Slist "ENDIF" "ENDSTMT" { Tnode::create_flow_node(FlowType::If, Some(vec![$3?]), Some(vec![$6?])) }
+IfStmt -> Result<Tnode, ParseError>:
+          "IF" "(" Expr ")" "THEN" Slist "ELSE" Slist "ENDIF" "ENDSTMT" { Tnode::create_flow_node($span, FlowType::If, Some(vec![$3?]), Some(vec![$6?, $8?])) }
+          | "IF" "(" Expr ")" "THEN" Slist "ENDIF" "ENDSTMT" { Tnode::create_flow_node($span, FlowType::If, Some(vec![$3?]), Some(vec![$6?])) }
           ;
 
-WhileStmt -> Result<Tnode, Box<dyn Error>>:
-             "WHILE" "(" Expr ")" "DO" Slist "ENDWHILE" "ENDSTMT" { Tnode::create_flow_node(FlowType::While, Some(vec![$3?]), Some(vec![$6?])) }
+WhileStmt -> Result<Tnode, ParseError>:
+             "WHILE" "(" Expr ")" "DO" Slist "ENDWHILE" "ENDSTMT" { Tnode::create_flow_node($span, FlowType::While, Some(vec![$3?]), Some(vec![$6?])) }
              ;
 
-DoWhileStmt -> Result<Tnode, Box<dyn Error>>:
-               "DO" Slist "WHILE" "(" Expr ")"  "ENDSTMT" { Tnode::create_flow_node(FlowType::DoWhile, Some(vec![$5?]), Some(vec![$2?])) }
+DoWhileStmt -> Result<Tnode, ParseError>:
+               "DO" Slist "WHILE" "(" Expr ")"  "ENDSTMT" { Tnode::create_flow_node($span, FlowType::DoWhile, Some(vec![$5?]), Some(vec![$2?])) }
                ;
 
-RepeatUntilStmt -> Result<Tnode, Box<dyn Error>>:
-            "REPEAT" Slist "UNTIL" "(" Expr ")"  "ENDSTMT" { Tnode::create_flow_node(FlowType::RepeatUntil, Some(vec![$5?]), Some(vec![$2?])) }
+RepeatUntilStmt -> Result<Tnode, ParseError>:
+            "REPEAT" Slist "UNTIL" "(" Expr ")"  "ENDSTMT" { Tnode::create_flow_node($span, FlowType::RepeatUntil, Some(vec![$5?]), Some(vec![$2?])) }
             ;
 
-ContinueStmt -> Result<Tnode, Box<dyn Error>>:
-                "CONTINUE" "ENDSTMT" { Tnode::create_flow_node(FlowType::Continue, None, None) }
+ContinueStmt -> Result<Tnode, ParseError>:
+                "CONTINUE" "ENDSTMT" { Tnode::create_flow_node($span, FlowType::Continue, None, None) }
                 ;
 
-BreakStmt -> Result<Tnode, Box<dyn Error>>:
-                "BREAK" "ENDSTMT" { Tnode::create_flow_node(FlowType::Break, None, None) }
+BreakStmt -> Result<Tnode, ParseError>:
+                "BREAK" "ENDSTMT" { Tnode::create_flow_node($span, FlowType::Break, None, None) }
                 ;
 
-Expr -> Result<Tnode, Box<dyn Error>>:
+Expr -> Result<Tnode, ParseError>:
         "(" Expr ")" { $2 }
-      | Expr "DIV" Expr { Tnode::create_op_node(OpType::Div, DType::Int, $1?,  $3? ) }
-      | Expr "MUL" Expr { Tnode::create_op_node(OpType::Mul, DType::Int, $1?,  $3? ) }
-      | Expr "ADD" Expr { Tnode::create_op_node(OpType::Add, DType::Int, $1?,  $3? ) }
-      | Expr "SUB" Expr { Tnode::create_op_node(OpType::Sub, DType::Int, $1?,  $3? ) }
-      | Expr "LT" Expr { Tnode::create_op_node(OpType::Lt, DType::Bool, $1?, $3? ) }
-      | Expr "GT" Expr { Tnode::create_op_node(OpType::Gt, DType::Bool, $1?, $3? ) }
-      | Expr "EQ" Expr { Tnode::create_op_node(OpType::Eq, DType::Bool, $1?, $3? ) }
-      | Expr "NE" Expr { Tnode::create_op_node(OpType::NEq, DType::Bool, $1?, $3? ) }
-      | Expr "LE" Expr { Tnode::create_op_node(OpType::LEq, DType::Bool, $1?, $3? ) }
-      | Expr "GE" Expr { Tnode::create_op_node(OpType::GEq, DType::Bool, $1?, $3? ) }
+      | Expr "DIV" Expr { Tnode::create_op_node($span, OpType::Div, DType::Int, DType::Int, $1?,  $3? ) }
+      | Expr "MUL" Expr { Tnode::create_op_node($span, OpType::Mul, DType::Int, DType::Int, $1?,  $3? ) }
+      | Expr "ADD" Expr { Tnode::create_op_node($span, OpType::Add, DType::Int, DType::Int, $1?,  $3? ) }
+      | Expr "SUB" Expr { Tnode::create_op_node($span, OpType::Sub, DType::Int, DType::Int, $1?,  $3? ) }
+      | Expr "LT" Expr { Tnode::create_op_node($span, OpType::Lt, DType::Int, DType::Bool, $1?, $3? ) }
+      | Expr "GT" Expr { Tnode::create_op_node($span, OpType::Gt, DType::Int, DType::Bool, $1?, $3? ) }
+      | Expr "EQ" Expr { Tnode::create_op_node($span, OpType::Eq, DType::Int, DType::Bool, $1?, $3? ) }
+      | Expr "NE" Expr { Tnode::create_op_node($span, OpType::NEq, DType::Int, DType::Bool, $1?, $3? ) }
+      | Expr "LE" Expr { Tnode::create_op_node($span, OpType::LEq, DType::Int, DType::Bool, $1?, $3? ) }
+      | Expr "GE" Expr { Tnode::create_op_node($span, OpType::GEq, DType::Int, DType::Bool, $1?, $3? ) }
       | Id { $1 }
-      | "NUM" { Tnode::create_constant(DType::Int, $lexer, &$1?) }
+      | "NUM" { Tnode::create_constant($span, DType::Int, $lexer) }
       ;
 
-Id -> Result<Tnode, Box<dyn Error>>:
-      "ID" { Tnode::create_id_node($lexer, &$1?) }
+Id -> Result<Tnode, ParseError>:
+      "ID" { Tnode::create_id_node($span, $lexer) }
       ;
 
 Unmatched -> ():
@@ -97,4 +97,4 @@ Unmatched -> ():
 %%
 // Any functions here are in scope for all the grammar actions above.
 use compiler::tnode::{Tnode, OpType, DType, FlowType};
-use std::error::Error;
+use compiler::errors::ParseError;

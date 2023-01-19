@@ -1,7 +1,8 @@
 use std::{error::Error};
+use crate::errors::ParseError;
 
 use lrlex::DefaultLexeme;
-use lrpar::{NonStreamingLexer, Lexeme};
+use lrpar::{NonStreamingLexer, Span};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DType {
@@ -82,49 +83,67 @@ impl Tnode {
         }
     }
 
-    pub fn create_constant(dtype: DType, lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>, value: &DefaultLexeme) -> Result<Tnode, Box<dyn Error>> {
-        let value = lexer.span_str(value.span()).to_string();
+    pub fn create_constant(span: Span, dtype: DType, lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>) -> Result<Tnode, ParseError> {
+        let value = lexer.span_str(span).to_string();
         match dtype {
             DType::Int => {
                 let parse_result = value.parse::<i32>();
                 match parse_result {
                     Ok(_) => return Ok(Tnode::Constant { dtype, value: value }),
-                    Err(_) => Err(format!("ERROR: Invalid integer {}", value).into())
+                    Err(_) => Err(ParseError(span, format!("ERROR: Invalid integer {}", value)))
                 }
             }
-            _ => Err(format!("ERROR: Invalid datatype for constant {:?}", dtype).into())
+            _ => Err(ParseError(span, format!("ERROR: Invalid datatype for constant {:?}", dtype)))
         }
     }
 
-    pub fn create_id_node(lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>, name: &DefaultLexeme) -> Result<Tnode, Box<dyn Error>> {
-        let name = lexer.span_str(name.span()).to_string();
-        Ok( Tnode::Id{ dtype: DType::Void, name: name } )
+    pub fn create_id_node(span: Span, lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>) -> Result<Tnode, ParseError> {
+        let name = lexer.span_str(span).to_string();
+        Ok( Tnode::Id{ dtype: DType::Int, name: name } )
     }
 
-    pub fn create_op_node(operation: OpType, dtype: DType, lhs: Tnode, rhs: Tnode ) -> Result<Tnode, Box<dyn Error>> {
-        if lhs.get_type() == rhs.get_type() && lhs.get_type() == dtype {
-            return Ok(Tnode::Op { dtype: dtype, optype: operation, lhs: Box::new(lhs), rhs: Box::new(rhs) });
+    pub fn create_op_node(span: Span, operation: OpType, in_type: DType, out_type: DType, lhs: Tnode, rhs: Tnode ) -> Result<Tnode, ParseError> {
+        let lhs_type = lhs.get_type();
+        let rhs_type = rhs.get_type();
+        if lhs_type == rhs_type && lhs_type == in_type {
+            return Ok(Tnode::Op { dtype: out_type, optype: operation, lhs: Box::new(lhs), rhs: Box::new(rhs) });
         }
-        Err(format!("ERROR: LHS and RHS have incompatible types for the operator: {:?}", operation).into())
+        Err(ParseError(span, format!("ERROR: LHS (Type: {:?}) and RHS (Type: {:?}) have incompatible types for the operator: {:?}",lhs_type, rhs_type, operation)))
     }
 
-    pub fn create_assign_node(id: &mut Tnode, expr: Tnode ) -> Result<Tnode, Box<dyn Error>> {
+    pub fn create_assign_node(span:Span, id: Tnode, expr: Tnode ) -> Result<Tnode, ParseError> {
         let expr_dtype = expr.get_type();
         match expr_dtype {
             DType::Int => {
-                if let Tnode::Id { ref mut dtype, name } = id {
-                    *dtype = DType::Int;
-                    let id = Tnode::Id{dtype:DType::Int, name: name.clone()};
-                    return Ok( Tnode::AsgStmt{ id: Box::new(id), expr: Box::new(expr)} );
-                }
+                return Ok( Tnode::AsgStmt{ id: Box::new(id), expr: Box::new(expr)} );
             }
-            _ => return Err(format!("ERROR: Invalid datatype for identifier: {:?}", expr_dtype).into())
+            _ => return Err(ParseError(span, format!("ERROR: Invalid datatype for identifier: {:?}", expr_dtype)))
         }
-
-        Err(format!("ERROR: Invalid identifier!").into())
     }
 
-    pub fn create_flow_node(ftype: FlowType, bool_exprs: Option<Vec<Tnode>>, slists: Option<Vec<Tnode>>) -> Result<Tnode, Box<dyn Error>> {
+    pub fn create_read_node(span:Span, id: Tnode) -> Result<Tnode, ParseError> {
+        let id_type = id.get_type();
+        match id_type {
+            DType::Int => {
+                if let Tnode::Id { .. } = id {
+                    return Ok( Tnode::Read{ id: Box::new(id) } );
+                }
+            }
+            _ => return Err(ParseError(span, format!("ERROR: Invalid datatype for identifier in read(): {:?}", id_type)))
+        }
+
+        Err(ParseError(span, format!("ERROR: Invalid identifier!")))
+    }
+
+    pub fn create_write_node(span:Span, expr: Tnode) -> Result<Tnode, ParseError> {
+        let expr_type = expr.get_type();
+        match expr_type {
+            DType::Int => return Ok( Tnode::Write{ expr: Box::new(expr) } ),
+            _ => return Err(ParseError(span, format!("ERROR: Invalid datatype for identifier in write(): {:?}", expr_type)))
+        }
+    }
+
+    pub fn create_flow_node(span:Span, ftype: FlowType, bool_exprs: Option<Vec<Tnode>>, slists: Option<Vec<Tnode>>) -> Result<Tnode, ParseError> {
         match ftype {
             FlowType::Continue => return Ok(Tnode::FlowStmt{ ftype, bool_exprs: None, slists: None }),
             FlowType::Break => return Ok(Tnode::FlowStmt{ ftype, bool_exprs: None, slists: None }),
@@ -137,9 +156,9 @@ impl Tnode {
                                 return Ok(Tnode::FlowStmt{ ftype, bool_exprs: Some(bool_list.into_iter().map(|b| Box::new(b)).collect()), slists: Some(stmt_list.into_iter().map(|s| Box::new(s)).collect()) });
                             }
                         }
-                        return Err(format!("ERROR: No Boolean expression found for {:?}", ftype).into())
+                        return Err(ParseError(span, format!("ERROR: No Boolean expression found for {:?}", ftype)))
                     }
-                    None => return Err(format!("ERROR: No Boolean expression found for {:?}", ftype).into())
+                    None => return Err(ParseError(span, format!("ERROR: No Boolean expression found for {:?}", ftype)))
                 }
             }
         }
