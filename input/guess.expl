@@ -1,0 +1,13 @@
+begin
+    a = 20;
+    read(b);
+    while( b != a ) do
+        if ( b < a ) then
+            write(1355);
+        else
+            write(62347);
+        endif;
+        read(b);
+    endwhile;
+    write(38041);
+end

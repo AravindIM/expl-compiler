@@ -1,0 +1,18 @@
+begin
+    a = 20;
+    repeat
+        read(b);
+        if ( b == 0 ) then
+            break;
+        endif;
+        if ( b == 1 ) then
+            continue;
+        endif;
+        if ( b < a ) then
+            write(1355);
+        else
+            write(62347);
+        endif;
+    until ( b == a );
+    write(38041);
+end
