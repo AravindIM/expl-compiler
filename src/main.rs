@@ -1,12 +1,13 @@
 use std::{env, fs, process};
+use compiler::errors::ParseError;
+use compiler::generator::code_gen;
+use compiler::utils::fetch_filenames;
 
 use lrlex::lrlex_mod;
-use lrpar::lrpar_mod;
+use lrpar::{lrpar_mod, NonStreamingLexer};
 
 lrlex_mod!("lex.l");
 lrpar_mod!("yacc.y");
-
-use compiler::*;
 
 fn main() {
     let lexerdef = lex_l::lexerdef();
@@ -32,7 +33,15 @@ fn main() {
         process::exit(1);
     }
 
-    if let Some(Ok(node)) = res {
-        code_gen(&lexer, node, &output_file).expect("ERROR: Code generation halted!");
+    match res {
+        Some(parse_res) => match parse_res {
+            Ok(node) => code_gen(&lexer, &node, &output_file).expect("ERROR: Code generation halted!"),
+            Err(ParseError(span, message)) => {
+                let ((start_line, start_col), (_, _)) = lexer.line_col(span);
+                eprintln!("ERROR: Parsing error at line {start_line} column {start_col}:");
+                eprintln!("{message}");
+            }
+        }
+        None => eprintln!("ERROR: Parsing failed!")
     }
 }
