@@ -117,7 +117,12 @@ impl Tnode {
             DType::Int => {
                 return Ok( Tnode::AsgStmt{ id: Box::new(id), expr: Box::new(expr)} );
             }
-            _ => return Err(ParseError(span, format!("ERROR: Invalid datatype for identifier: {:?}", expr_dtype)))
+            _ => {
+                if let Tnode::Id{ dtype, name} = id {
+                    return Err(ParseError(span, format!("ERROR: Expected type {:?} but found {:?} for variable '{}'!", dtype, expr_dtype, name)))
+                }
+                return Err(ParseError(span, format!("ERROR: Missing identifier")));
+            }
         }
     }
 
@@ -139,7 +144,7 @@ impl Tnode {
         let expr_type = expr.get_type();
         match expr_type {
             DType::Int => return Ok( Tnode::Write{ expr: Box::new(expr) } ),
-            _ => return Err(ParseError(span, format!("ERROR: Invalid datatype for identifier in write(): {:?}", expr_type)))
+            _ => return Err(ParseError(span, format!("ERROR: Invalid datatype for expression in write(): {:?}", expr_type)))
         }
     }
 
