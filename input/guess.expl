@@ -1,13 +1,16 @@
 begin
-    a = 20;
-    read(b);
-    while( b != a ) do
-        if ( b < a ) then
-            write(1355);
+    decl
+        int correct_answer, your_guess;
+    enddecl
+    correct_answer = 20;
+    read(your_guess);
+    while( your_guess != correct_answer ) do
+        if ( your_guess < correct_answer ) then
+            write("less");
         else
-            write(62347);
+            write("greater");
         endif;
-        read(b);
+        read(your_guess);
     endwhile;
-    write(38041);
+    write("equal");
 end

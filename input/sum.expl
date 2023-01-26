@@ -1,9 +1,17 @@
 begin
-    a = 0;
-    read(b);
-    while ( b != 0 ) do
-        a = a + b;
-        read(b);
+    decl
+        int num, sum;
+        str mesg;
+    enddecl
+
+    read(num);
+    sum = 0;
+    while (num != 0) do
+        sum = sum + num;
+        read(num);
     endwhile;
-    write(a);
+    write("sum is:");
+    write(sum);
+    mesg = "good bye";
+    write(mesg);
 end
