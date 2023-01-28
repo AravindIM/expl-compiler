@@ -12,50 +12,53 @@
 %epp GE ">="
 %epp ENDSTMT ";"
 
-%token "BEGIN" "END" "ENDSTMT" "ID" "ASG" "READ" "WRITE" "IF" "THEN" "ELSE" "ENDIF" "WHILE" "DO" "ENDWHILE" "BREAK" "CONTINUE" "DECL" "ENDDECL" "INT" "STR" "CONST_INT" "CONST_STR" "(" ")" "," "UNMATCHED"
+%token "BEGIN" "END" "ENDSTMT" "ID" "ASG" "READ" "WRITE" "IF" "THEN" "ELSE" "ENDIF" "WHILE" "DO" "ENDWHILE" "BREAK" "CONTINUE" "DECL" "ENDDECL" "INT" "STR" "CONST_INT" "CONST_STR" "(" ")" "[" "]" "," "UNMATCHED"
 %nonassoc "LE" "GE" "NE" "EQ" "LT" "GT"
 %left "ADD" "SUB"
 %left "MUL" "DIV"
 
 %%
 
-Prog -> Result<Tnode, ParseError>:
+Prog -> Result<Tnode, LangParseError>:
         "BEGIN" Declarations Slist "END" { $3 }
+      | "BEGIN" Declarations "END" { Ok( Tnode::NullProg ) }
       |  "BEGIN" Slist "END" { $2 }
       | "BEGIN" "END" { Ok( Tnode::NullProg ) }
       ;
 
-Declarations -> Result<(), ParseError>:
+Declarations -> Result<(), LangParseError>:
                 "DECL" DeclList "ENDDECL" { Ok( () ) }
               | "DECL" "ENDDECL" { Ok( () ) }
               ;
 
-DeclList -> Result<(), ParseError>:
+DeclList -> Result<(), LangParseError>:
             DeclList Decl { Ok( () ) }
           | Decl { Ok( () ) }
           ;
 
 
-Decl -> Result<(), ParseError>:
+Decl -> Result<(), LangParseError>:
         Type VarList "ENDSTMT" { Ok( ST.lock().unwrap().append_decl( Declaration::new($1?, $2?.to_owned()) ) ) }
       ;
 
-Type -> Result<DType, ParseError>:
+Type -> Result<DType, LangParseError>:
         "INT" { Ok( DType::Int ) }
       | "STR" { Ok ( DType::Str ) }
       ;
 
-VarList -> Result<Vec<String>, ParseError>:
-           VarList "," "ID" { let mut varlist = $1?.clone(); varlist.push( $lexer.span_str($3.as_ref().unwrap().span()).to_string() ); Ok( varlist ) }
-         | "ID" { Ok( vec![ $lexer.span_str($1.as_ref().unwrap().span()).to_string() ] ) }
+VarList -> Result<HashMap<String,usize>, LangParseError>:
+           VarList "," "ID" { Declaration::varlist($1?, $3.as_ref().unwrap(), None, $lexer ) }
+         | "ID" { Declaration::variable($1.as_ref().unwrap(), None, $lexer) }
+         | VarList "," "ID" "[" "CONST_INT" "]" { Declaration::varlist($1?, $3.as_ref().unwrap(), Some($5.as_ref().unwrap()), $lexer ) }
+         | "ID" "[" "CONST_INT" "]" { Declaration::variable($1.as_ref().unwrap(), Some($3.as_ref().unwrap()), $lexer) }
          ;
 
-Slist -> Result<Tnode, ParseError>:
+Slist -> Result<Tnode, LangParseError>:
         Slist Stmt { Ok( Tnode::Connector{ lhs: Box::new($1?), rhs: Box::new($2?) } ) }
       | Stmt { $1 }
       ;
 
-Stmt -> Result<Tnode, ParseError>:
+Stmt -> Result<Tnode, LangParseError>:
         InputStmt { $1 }
       | OutputStmt { $1 }
       | AsgStmt { $1 }
@@ -67,44 +70,44 @@ Stmt -> Result<Tnode, ParseError>:
       | BreakStmt { $1 }
       ;
 
-InputStmt -> Result<Tnode, ParseError>:
+InputStmt -> Result<Tnode, LangParseError>:
              "READ" "(" Id ")" "ENDSTMT" { Tnode::create_read_node($span, $3?) }
             ;
 
-OutputStmt -> Result<Tnode, ParseError>:
+OutputStmt -> Result<Tnode, LangParseError>:
               "WRITE" "(" Expr ")" "ENDSTMT" { Tnode::create_write_node($span, $3?) }
             ;
 
-AsgStmt -> Result<Tnode, ParseError>:
+AsgStmt -> Result<Tnode, LangParseError>:
            Id "ASG" Expr "ENDSTMT" { Tnode::create_assign_node($span, $1?, $3?) }
          ;
 
-IfStmt -> Result<Tnode, ParseError>:
+IfStmt -> Result<Tnode, LangParseError>:
           "IF" "(" Expr ")" "THEN" Slist "ELSE" Slist "ENDIF" "ENDSTMT" { Tnode::create_flow_node($span, FlowType::If, Some(vec![$3?]), Some(vec![$6?, $8?])) }
         | "IF" "(" Expr ")" "THEN" Slist "ENDIF" "ENDSTMT" { Tnode::create_flow_node($span, FlowType::If, Some(vec![$3?]), Some(vec![$6?])) }
         ;
 
-WhileStmt -> Result<Tnode, ParseError>:
+WhileStmt -> Result<Tnode, LangParseError>:
              "WHILE" "(" Expr ")" "DO" Slist "ENDWHILE" "ENDSTMT" { Tnode::create_flow_node($span, FlowType::While, Some(vec![$3?]), Some(vec![$6?])) }
            ;
 
-DoWhileStmt -> Result<Tnode, ParseError>:
+DoWhileStmt -> Result<Tnode, LangParseError>:
                "DO" Slist "WHILE" "(" Expr ")"  "ENDSTMT" { Tnode::create_flow_node($span, FlowType::DoWhile, Some(vec![$5?]), Some(vec![$2?])) }
              ;
 
-RepeatUntilStmt -> Result<Tnode, ParseError>:
+RepeatUntilStmt -> Result<Tnode, LangParseError>:
                    "REPEAT" Slist "UNTIL" "(" Expr ")"  "ENDSTMT" { Tnode::create_flow_node($span, FlowType::RepeatUntil, Some(vec![$5?]), Some(vec![$2?])) }
                  ;
 
-ContinueStmt -> Result<Tnode, ParseError>:
+ContinueStmt -> Result<Tnode, LangParseError>:
                 "CONTINUE" "ENDSTMT" { Tnode::create_flow_node($span, FlowType::Continue, None, None) }
                 ;
 
-BreakStmt -> Result<Tnode, ParseError>:
+BreakStmt -> Result<Tnode, LangParseError>:
                 "BREAK" "ENDSTMT" { Tnode::create_flow_node($span, FlowType::Break, None, None) }
                 ;
 
-Expr -> Result<Tnode, ParseError>:
+Expr -> Result<Tnode, LangParseError>:
         "(" Expr ")" { $2 }
       | Expr "DIV" Expr { Tnode::create_op_node($span, OpType::Div, vec![DType::Int], DType::Int, $1?,  $3? ) }
       | Expr "MUL" Expr { Tnode::create_op_node($span, OpType::Mul, vec![DType::Int], DType::Int, $1?,  $3? ) }
@@ -121,8 +124,9 @@ Expr -> Result<Tnode, ParseError>:
       | "CONST_STR" { Tnode::create_constant($span, DType::Str, $lexer) }
       ;
 
-Id -> Result<Tnode, ParseError>:
-      "ID" { Tnode::create_id_node($span, $lexer) }
+Id -> Result<Tnode, LangParseError>:
+      "ID" { Tnode::create_id_node($1.as_ref().unwrap(), None, $lexer) }
+    | "ID" "[" Expr "]" { Tnode::create_id_node($1.as_ref().unwrap(), Some($3?),  $lexer) }
     ;
 
 Unmatched -> ():
@@ -131,6 +135,7 @@ Unmatched -> ():
 %%
 // Any functions here are in scope for all the grammar actions above.
 use compiler::tnode::{Tnode, OpType, DType, FlowType};
-use compiler::errors::ParseError;
+use compiler::errors::LangParseError;
 use compiler::symboltable::{Declaration};
 use compiler::ST;
+use std::collections::HashMap;

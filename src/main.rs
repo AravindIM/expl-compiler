@@ -1,5 +1,5 @@
 use std::{env, fs, process};
-use compiler::errors::ParseError;
+use compiler::errors::LangParseError;
 use compiler::generator::CodeGenerator;
 use compiler::utils::fetch_filenames;
 
@@ -38,7 +38,7 @@ fn main() {
     match res {
         Some(parse_res) => match parse_res {
             Ok(node) => code_gen.generate(&lexer, &node, &output_file).expect("ERROR: Code generation halted!"),
-            Err(ParseError(span, message)) => {
+            Err(LangParseError(span, message)) => {
                 let ((start_line, start_col), (_, _)) = lexer.line_col(span);
                 eprintln!("ERROR: Parsing error at line {start_line} column {start_col}:");
                 eprintln!("{message}");

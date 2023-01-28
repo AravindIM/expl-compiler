@@ -1,0 +1,16 @@
+begin
+    decl
+        int i;
+        int array[5];
+    enddecl
+    i = 0;
+    while(i < 5) do
+        read(array[i]);
+        i = i + 1;
+    endwhile;
+    i = 0;
+    while(i < 5) do
+        write(array[i]);
+        i = i + 1;
+    endwhile;
+end

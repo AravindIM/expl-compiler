@@ -1,4 +1,4 @@
 use lrpar::Span;
 
 #[derive(Debug)]
-pub struct ParseError(pub Span,pub String);
+pub struct LangParseError(pub Span,pub String);

@@ -1,6 +1,9 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
-use crate::tnode::DType;
+use lrlex::DefaultLexeme;
+use lrpar::{NonStreamingLexer, Lexeme};
+
+use crate::{tnode::DType, errors::LangParseError};
 
 pub struct TableEntry {
     pub dtype: DType,
@@ -10,14 +13,34 @@ pub struct TableEntry {
 
 pub struct Declaration {
     pub dtype: DType,
-    pub variables: Vec<String>
+    pub variables: HashMap<String,usize>
 }
 
 impl Declaration {
-    pub fn new(dtype: DType, variables: Vec<String>) -> Declaration {
+    pub fn new(dtype: DType, variables: HashMap<String,usize>) -> Declaration {
         Declaration { dtype: dtype.clone(), variables: variables.clone() }
     }
-    
+
+    pub fn variable(name: &DefaultLexeme, size: Option<&DefaultLexeme>, lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>) -> Result<HashMap<String, usize>, LangParseError> {
+        let name = lexer.span_str(name.span()).to_string();
+        let var_size: usize = match size {
+            Some(size) => lexer.span_str(size.span()).to_string().parse().unwrap(),
+            None => 1
+        };
+        let mut var_entry = HashMap::new();
+        var_entry.insert(name, var_size);
+        Ok(var_entry.clone())
+    }
+
+    pub fn varlist(mut prevlist: HashMap<String, usize>, name: &DefaultLexeme, size: Option<&DefaultLexeme>, lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>) -> Result<HashMap<String, usize>, LangParseError> {
+        let name = lexer.span_str(name.span()).to_string();
+        let var_size: usize = match size {
+            Some(size) => lexer.span_str(size.span()).to_string().parse().unwrap(),
+            None => 1
+        };
+        prevlist.insert(name, var_size);
+        Ok(prevlist)
+    }
 }
 
 pub struct SymbolTable {
@@ -35,8 +58,8 @@ impl SymbolTable {
     }
 
     pub fn append_decl(&mut self, decl: Declaration){
-        for varname in &decl.variables {
-            self.append(varname.to_string(), decl.dtype.clone(), 1);
+        for varname in decl.variables.keys() {
+            self.append(varname.to_string(), decl.dtype.clone(), *decl.variables.get(varname).unwrap());
         }
     }
 

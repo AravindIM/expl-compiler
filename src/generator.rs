@@ -88,30 +88,28 @@ impl CodeGenerator {
                 return Ok(None);
             }
             Tnode::Read { id } => {
-                if let Tnode::Id { .. } = **id {
-                    let address: usize = id.get_address()?;
+                if let Tnode::Id { dtype: _, name: _, address } = &**id {
+                    let reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
                     let used_reg_list = self.regpool.get_used()?;
                     for used_reg in used_reg_list.iter() {
                         writeln!(object_file, "PUSH R{}", used_reg)?;
                     }
-                    let reg1 = self.regpool.get_free()?;
                     let reg2 = self.regpool.get_free()?;
-                    writeln!(object_file, "MOV R{}, \"Read\"", reg1)?;
-                    writeln!(object_file, "PUSH R{}", reg1)?;
-                    writeln!(object_file, "MOV R{}, -1", reg1)?;
-                    writeln!(object_file, "PUSH R{}", reg1)?;
-                    writeln!(object_file, "MOV R{}, {}", reg1, address)?;
+                    writeln!(object_file, "MOV R{}, \"Read\"", reg2)?;
+                    writeln!(object_file, "PUSH R{}", reg2)?;
+                    writeln!(object_file, "MOV R{}, -1", reg2)?;
+                    writeln!(object_file, "PUSH R{}", reg2)?;
                     writeln!(object_file, "PUSH R{}", reg1)?;
                     writeln!(object_file, "PUSH R{}", reg2)?;
                     writeln!(object_file, "PUSH R{}", reg2)?;
                     writeln!(object_file, "CALL 0")?;
+                    writeln!(object_file, "POP R{}", reg2)?;
                     writeln!(object_file, "POP R{}", reg1)?;
-                    writeln!(object_file, "POP R{}", reg2)?;
-                    writeln!(object_file, "POP R{}", reg2)?;
-                    writeln!(object_file, "POP R{}", reg2)?;
-                    writeln!(object_file, "POP R{}", reg2)?;
-                    self.regpool.set_free(reg2);
+                    writeln!(object_file, "POP R{}", reg1)?;
+                    writeln!(object_file, "POP R{}", reg1)?;
+                    writeln!(object_file, "POP R{}", reg1)?;
                     self.regpool.set_free(reg1);
+                    self.regpool.set_free(reg2);
                     for used_reg in used_reg_list.iter() {
                         writeln!(object_file, "POP R{}", used_reg)?;
                     }
@@ -149,14 +147,12 @@ impl CodeGenerator {
                 return Err("ERROR: write() has invalid argument!".into());
             }
             Tnode::AsgStmt { id, expr } => {
-                if let  Tnode::Id { ..  } = id.as_ref() {
+                if let  Tnode::Id { dtype:_, name: _, address  } = id.as_ref() {
                     // *dtype = expr.get_type();
-                    let address = id.get_address()?;
-                    if let Some(reg1) = self.ast_to_code(lexer, &*expr, object_file)? {
-                        let reg2 = self.regpool.get_free()?;
-                        writeln!(object_file, "MOV R{}, {}", reg2, address)?;
-                        writeln!(object_file, "MOV [R{}], R{}", reg2, reg1)?;
-                    }
+                    let reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
+                    let reg2 = self.ast_to_code(lexer, &*expr, object_file)?.unwrap();
+                    writeln!(object_file, "MOV [R{}], R{}", reg1, reg2)?;
+                    self.regpool.set_free(reg1);
                 };
                 return Ok(None);
             }
@@ -302,12 +298,10 @@ impl CodeGenerator {
                     Ok(None)
                 }
             },
-            Tnode::Id { .. } => {
+            Tnode::Id { dtype: _, name: _, address } => {
                 // let id = var.name;
-                let address: usize = node.get_address()?;
-                let reg1 = self.regpool.get_free()?;
+                let reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
                 let reg2 = self.regpool.get_free()?;
-                writeln!(object_file, "MOV R{}, {}", reg1, address)?;
                 writeln!(object_file, "MOV R{}, [R{}]", reg2, reg1)?;
                 self.regpool.set_free(reg1);
                 return Ok(Some(reg2));
