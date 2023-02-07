@@ -2,7 +2,7 @@
 
 %epp ADD "+"
 %epp SUB "-"
-%epp MUL "*"
+%epp ASTERISK "*"
 %epp DIV "/"
 %epp LT "<"
 %epp GT "<"
@@ -10,51 +10,68 @@
 %epp NE "!="
 %epp LE "<="
 %epp GE ">="
+%epp AMP "&"
 %epp ENDSTMT ";"
 
 %token "BEGIN" "END" "ENDSTMT" "ID" "ASG" "READ" "WRITE" "IF" "THEN" "ELSE" "ENDIF" "WHILE" "DO" "ENDWHILE" "BREAK" "CONTINUE" "DECL" "ENDDECL" "INT" "STR" "CONST_INT" "CONST_STR" "(" ")" "[" "]" "," "UNMATCHED"
 %nonassoc "LE" "GE" "NE" "EQ" "LT" "GT"
 %left "ADD" "SUB"
-%left "MUL" "DIV"
+%left "ASTERISK" "DIV" "MOD"
+%left "AMP"
 
 %%
 
 Prog -> Result<Tnode, LangParseError>:
-        "BEGIN" Declarations Slist "END" { $3 }
-      | "BEGIN" Declarations "END" { Ok( Tnode::NullProg ) }
+        "BEGIN" Declarations Slist "END" { Declaration::attach($2, $3) }
+      | "BEGIN" Declarations "END" { Declaration::attach($2, Ok(Tnode::NullProg{ span: $span }) ) }
       |  "BEGIN" Slist "END" { $2 }
-      | "BEGIN" "END" { Ok( Tnode::NullProg ) }
+      | "BEGIN" "END" { Ok( Tnode::NullProg{ span: $span } ) }
       ;
 
 Declarations -> Result<(), LangParseError>:
-                "DECL" DeclList "ENDDECL" { Ok( () ) }
+                "DECL" DeclList "ENDDECL" { ST.lock().unwrap().append_decl($2?) }
               | "DECL" "ENDDECL" { Ok( () ) }
               ;
 
-DeclList -> Result<(), LangParseError>:
-            DeclList Decl { Ok( () ) }
-          | Decl { Ok( () ) }
+DeclList -> Result<Declaration, LangParseError>:
+            DeclList Decl { $1?.join($2?) }
+          | Decl { $1 }
           ;
 
 
-Decl -> Result<(), LangParseError>:
-        Type VarList "ENDSTMT" { Ok( ST.lock().unwrap().append_decl( Declaration::new($1?, $2?.to_owned()) ) ) }
+Decl -> Result<Declaration, LangParseError>:
+        Type VarList "ENDSTMT" { Ok( Declaration::new($1?, $2?.to_owned()) ) }
       ;
 
-Type -> Result<DType, LangParseError>:
-        "INT" { Ok( DType::Int ) }
-      | "STR" { Ok ( DType::Str ) }
+Type -> Result<Primitive, LangParseError>:
+        "INT" { Ok( Primitive::Int ) }
+      | "STR" { Ok ( Primitive::Str ) }
       ;
 
-VarList -> Result<HashMap<String,usize>, LangParseError>:
-           VarList "," "ID" { Declaration::varlist($1?, $3.as_ref().unwrap(), None, $lexer ) }
-         | "ID" { Declaration::variable($1.as_ref().unwrap(), None, $lexer) }
-         | VarList "," "ID" "[" "CONST_INT" "]" { Declaration::varlist($1?, $3.as_ref().unwrap(), Some($5.as_ref().unwrap()), $lexer ) }
-         | "ID" "[" "CONST_INT" "]" { Declaration::variable($1.as_ref().unwrap(), Some($3.as_ref().unwrap()), $lexer) }
+VarList -> Result<VarMap, LangParseError>:
+           VarList "," Var { Declaration::variables(Some($1?), $3?, $lexer ) }
+         | Var { Declaration::variables(None, $1?, $lexer) }
+         ;
+
+Var -> Result<VarData, LangParseError>:
+       "ID" { Ok( VarData{ name: $1.unwrap(), dtype: DType::Data(Primitive::Void), dim: Dimension::Unit } ) }
+      | "ID" VarSize { Ok( VarData{ name: $1.unwrap(), dtype: DType::Data(Primitive::Void), dim: $2? } ) }
+      | "ASTERISK" "ID" { Ok( VarData{ name: $2.unwrap(), dtype: DType::Pointer(Primitive::Void), dim: Dimension::Unit } ) }
+      | "ASTERISK" "ID" VarSize { Ok( VarData{ name: $2.unwrap(), dtype: DType::Pointer(Primitive::Void), dim: $3? } ) }
+      ;
+
+VarSize -> Result<Dimension, LangParseError>:
+           VarSize "[" Expr "]" { Dimension::array_size(Some($1?), $3?) }
+         | "[" Expr "]" { Dimension::array_size(None, $2?) }
+         ;
+
+VarIndex -> Result<Dimension, LangParseError>:
+           VarIndex "[" Expr "]" { Dimension::array_index(Some($1?), $3?) }
+         | "[" Expr "]" { Dimension::array_index(None, $2?) }
          ;
 
 Slist -> Result<Tnode, LangParseError>:
-        Slist Stmt { Ok( Tnode::Connector{ lhs: Box::new($1?), rhs: Box::new($2?) } ) }
+        Slist Stmt { Ok( Tnode::Connector{ span: $span, lhs: Box::new($1?), rhs: Box::new($2?) } ) }
       | Stmt { $1 }
       ;
 
@@ -79,7 +96,7 @@ OutputStmt -> Result<Tnode, LangParseError>:
             ;
 
 AsgStmt -> Result<Tnode, LangParseError>:
-           Id "ASG" Expr "ENDSTMT" { Tnode::create_assign_node($span, $1?, $3?) }
+           Expr "ASG" Expr "ENDSTMT" { Tnode::create_assign_node($span, $1?, $3?) }
          ;
 
 IfStmt -> Result<Tnode, LangParseError>:
@@ -109,24 +126,27 @@ BreakStmt -> Result<Tnode, LangParseError>:
 
 Expr -> Result<Tnode, LangParseError>:
         "(" Expr ")" { $2 }
-      | Expr "DIV" Expr { Tnode::create_op_node($span, OpType::Div, vec![DType::Int], DType::Int, $1?,  $3? ) }
-      | Expr "MUL" Expr { Tnode::create_op_node($span, OpType::Mul, vec![DType::Int], DType::Int, $1?,  $3? ) }
-      | Expr "ADD" Expr { Tnode::create_op_node($span, OpType::Add, vec![DType::Int], DType::Int, $1?,  $3? ) }
-      | Expr "SUB" Expr { Tnode::create_op_node($span, OpType::Sub, vec![DType::Int], DType::Int, $1?,  $3? ) }
-      | Expr "LT" Expr { Tnode::create_op_node($span, OpType::Lt, vec![DType::Int, DType::Str], DType::Bool, $1?, $3? ) }
-      | Expr "GT" Expr { Tnode::create_op_node($span, OpType::Gt, vec![DType::Int, DType::Str], DType::Bool, $1?, $3? ) }
-      | Expr "EQ" Expr { Tnode::create_op_node($span, OpType::Eq, vec![DType::Int, DType::Str], DType::Bool, $1?, $3? ) }
-      | Expr "NE" Expr { Tnode::create_op_node($span, OpType::NEq, vec![DType::Int, DType::Str], DType::Bool, $1?, $3? ) }
-      | Expr "LE" Expr { Tnode::create_op_node($span, OpType::LEq, vec![DType::Int, DType::Str], DType::Bool, $1?, $3? ) }
-      | Expr "GE" Expr { Tnode::create_op_node($span, OpType::GEq, vec![DType::Int, DType::Str], DType::Bool, $1?, $3? ) }
+      | Expr "MOD" Expr { Tnode::create_op_node($span, OpType::Mod, $1?,  Some($3?) ) }
+      | Expr "DIV" Expr { Tnode::create_op_node($span, OpType::Div, $1?,  Some($3?) ) }
+      | Expr "ASTERISK" Expr { Tnode::create_op_node($span, OpType::Mul, $1?,  Some($3?) ) }
+      | Expr "ADD" Expr { Tnode::create_op_node($span, OpType::Add, $1?,  Some($3?) ) }
+      | Expr "SUB" Expr { Tnode::create_op_node($span, OpType::Sub, $1?,  Some($3?) ) }
+      | Expr "LT" Expr { Tnode::create_op_node($span, OpType::Lt, $1?, Some($3?) ) }
+      | Expr "GT" Expr { Tnode::create_op_node($span, OpType::Gt, $1?, Some($3?) ) }
+      | Expr "EQ" Expr { Tnode::create_op_node($span, OpType::Eq, $1?, Some($3?) ) }
+      | Expr "NE" Expr { Tnode::create_op_node($span, OpType::NEq, $1?, Some($3?) ) }
+      | Expr "LE" Expr { Tnode::create_op_node($span, OpType::LEq, $1?, Some($3?) ) }
+      | Expr "GE" Expr { Tnode::create_op_node($span, OpType::GEq, $1?, Some($3?) ) }
+      | "AMP" Expr { Tnode::create_op_node($span, OpType::Amp, $2?, None) }
+      | "ASTERISK" Expr { Tnode::create_op_node($span, OpType::Deref, $2?, None) }
       | Id { $1 }
-      | "CONST_INT" { Tnode::create_constant($span, DType::Int, $lexer) }
-      | "CONST_STR" { Tnode::create_constant($span, DType::Str, $lexer) }
+      | "CONST_INT" { Tnode::create_constant($span, DType::Data(Primitive::Int), $lexer) }
+      | "CONST_STR" { Tnode::create_constant($span, DType::Data(Primitive::Str), $lexer) }
       ;
 
 Id -> Result<Tnode, LangParseError>:
-      "ID" { Tnode::create_id_node($1.as_ref().unwrap(), None, $lexer) }
-    | "ID" "[" Expr "]" { Tnode::create_id_node($1.as_ref().unwrap(), Some($3?),  $lexer) }
+      "ID" { Tnode::create_id_node($span, $1.as_ref().unwrap(), Dimension::Unit, $lexer) }
+    | "ID" VarIndex { Tnode::create_id_node($span, $1.as_ref().unwrap(), $2?,  $lexer) }
     ;
 
 Unmatched -> ():
@@ -134,8 +154,8 @@ Unmatched -> ():
            ;
 %%
 // Any functions here are in scope for all the grammar actions above.
-use compiler::tnode::{Tnode, OpType, DType, FlowType};
+use compiler::tnode::{Tnode, OpType, DType, Primitive, FlowType};
 use compiler::errors::LangParseError;
-use compiler::symboltable::{Declaration};
+use compiler::symboltable::{VarData, VarMap, Declaration, Dimension};
 use compiler::ST;
-use std::collections::HashMap;
+// use indexmap::IndexMap;

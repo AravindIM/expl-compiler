@@ -1,0 +1,6 @@
+begin
+    decl
+        int i;
+        int i;
+    enddecl
+end

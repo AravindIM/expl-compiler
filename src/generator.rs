@@ -1,7 +1,7 @@
 use crate::ST;
 use crate::label::LabelManager;
 use crate::register::RegPool;
-use crate::tnode::{FlowType, OpType, Tnode, DType};
+use crate::tnode::{FlowType, OpType, Tnode, DType, Primitive};
 use lrlex::DefaultLexeme;
 use lrpar::NonStreamingLexer;
 
@@ -80,15 +80,16 @@ impl CodeGenerator {
         node: &Tnode,
         object_file: &mut File,
     ) -> Result<Option<usize>, Box<dyn Error>> {
+        dbg!(node.clone());
         match node {
-            Tnode::NullProg => return Ok(None),
-            Tnode::Connector { lhs, rhs } => {
+            Tnode::NullProg {span: _} => return Ok(None),
+            Tnode::Connector {span: _, lhs, rhs } => {
                 self.ast_to_code(lexer, &*lhs, object_file)?;
                 self.ast_to_code(lexer, &*rhs, object_file)?;
                 return Ok(None);
             }
-            Tnode::Read { id } => {
-                if let Tnode::Id { dtype: _, name: _, address } = &**id {
+            Tnode::Read {span: _, id } => {
+                if let Tnode::Id {span: _, dtype: _, name: _, address } = &**id {
                     let reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
                     let used_reg_list = self.regpool.get_used()?;
                     for used_reg in used_reg_list.iter() {
@@ -117,7 +118,7 @@ impl CodeGenerator {
                 }
                 return Err("ERROR: read() has invalid argument!".into());
             }
-            Tnode::Write { expr } => {
+            Tnode::Write {span: _, expr } => {
                 if let Some(reg1) = self.ast_to_code(lexer, &*expr, object_file)? {
                     let used_reg_list = self.regpool.get_used()?;
                     for used_reg in used_reg_list.iter() {
@@ -146,17 +147,33 @@ impl CodeGenerator {
                 }
                 return Err("ERROR: write() has invalid argument!".into());
             }
-            Tnode::AsgStmt { id, expr } => {
-                if let  Tnode::Id { dtype:_, name: _, address  } = id.as_ref() {
-                    // *dtype = expr.get_type();
-                    let reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
-                    let reg2 = self.ast_to_code(lexer, &*expr, object_file)?.unwrap();
-                    writeln!(object_file, "MOV [R{}], R{}", reg1, reg2)?;
-                    self.regpool.set_free(reg1);
-                };
-                return Ok(None);
+            Tnode::AsgStmt { span: _, id, expr } => {
+                match id.as_ref() {
+                    Tnode::Id {span: _, dtype:_, name: _, address } => {
+                        // *dtype = expr.get_type();
+                        let reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
+                        let reg2 = self.ast_to_code(lexer, &*expr, object_file)?.unwrap();
+                        writeln!(object_file, "MOV [R{}], R{}", reg1, reg2)?;
+                        self.regpool.set_free(reg1);
+                        self.regpool.set_free(reg2);
+                        Ok(None)
+                    }
+                    Tnode::Op { span: _, dtype:_, optype, lhs, .. } => {
+                        if *optype == OpType::Deref {
+                            let reg1 = self.ast_to_code(lexer, lhs, object_file)?.unwrap();
+                            let reg2 = self.ast_to_code(lexer, &*expr, object_file)?.unwrap();
+                            writeln!(object_file, "MOV [R{}], R{}", reg1, reg2)?;
+                            self.regpool.set_free(reg1);
+                            self.regpool.set_free(reg2);
+                            return Ok(None);
+                        }
+                        Err("ERROR: Incorrect Operation found in LHS of assignment".into())
+                    }
+                    _ => Err("ERROR: Missing identifier or dereference in lhs for assignment".into())
+                }
             }
             Tnode::FlowStmt {
+                span: _,
                 ftype,
                 bool_exprs,
                 slists,
@@ -298,7 +315,8 @@ impl CodeGenerator {
                     Ok(None)
                 }
             },
-            Tnode::Id { dtype: _, name: _, address } => {
+            Tnode::Id {span: _, dtype: _, name: _, address } => {
+                // dbg!(name.clone());
                 // let id = var.name;
                 let reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
                 let reg2 = self.regpool.get_free()?;
@@ -307,14 +325,22 @@ impl CodeGenerator {
                 return Ok(Some(reg2));
             }
             Tnode::Op {
+                span: _,
                 dtype: _,
                 optype,
                 lhs,
                 rhs,
             } => {
-                if let Some(reg1) = self.ast_to_code(lexer, &*lhs, object_file)? {
-                    if let Some(reg2) = self.ast_to_code(lexer, &*rhs, object_file)? {
+                match rhs {
+                    Some(rhs) => {
+                        let reg1 = self.ast_to_code(lexer, &*lhs, object_file)?.unwrap();
+                        let reg2 = self.ast_to_code(lexer, &*rhs, object_file)?.unwrap();
                         match optype {
+                            OpType::Mod => {
+                                writeln!(object_file, "MOD R{}, R{}", reg1, reg2)?;
+                                self.regpool.set_free(reg2);
+                                return Ok(Some(reg1));
+                            }
                             OpType::Div => {
                                 writeln!(object_file, "DIV R{}, R{}", reg1, reg2)?;
                                 self.regpool.set_free(reg2);
@@ -365,16 +391,45 @@ impl CodeGenerator {
                                 self.regpool.set_free(reg2);
                                 return Ok(Some(reg1));
                             }
+                            _ => {
+                                return Err("ERROR: Unary Operator got two operands!".into())
+                            }
+                        }
+                    }
+                    None => {
+                        match optype {
+                            OpType::Amp => {
+                                let reg1: usize;
+                                match *lhs.clone() {
+                                    Tnode::Id { span:_, dtype:_, name:_, address } => {
+                                        // dbg!(address.clone());
+                                        reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
+                                        // dbg!("getting address parsed");
+                                    }
+                                    _ => return Err("ERROR: & operator can only be used on identifiers".into())
+                                }
+                                return Ok(Some(reg1));
+                            },
+                            OpType::Deref => {
+                                let reg1 = self.ast_to_code(lexer, &*lhs, object_file)?.unwrap();
+                                let reg2 = self.regpool.get_free()?;
+                                writeln!(object_file, "MOV R{}, [R{}]", reg2, reg1)?;
+                                self.regpool.set_free(reg1);
+                                Ok(Some(reg2))
+                            }
+                            _ => return Err("ERROR: Binary Operator only got one operand".into())
                         }
                     }
                 }
-                return Err(format!("ERROR: Operator {:?} has mismatching operands!", optype).into());
+                // return Err(format!("ERROR: Operator {:?} has mismatching operands!", optype).into());
             }
-            Tnode::Constant { dtype, value } => {
+            Tnode::Constant {span: _, dtype, value } => {
                 let reg1 = self.regpool.get_free()?;
                 match dtype {
-                    DType::Int => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
-                    DType::Str => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
+                    DType::Data(Primitive::Int) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
+                    DType::Data(Primitive::Str) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
+                    DType::Pointer(Primitive::Int) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
+                    DType::Pointer(Primitive::Str) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
                     _ => return Err(format!("ERROR: Invalid Constant!").into())
                 }
                 return Ok(Some(reg1));

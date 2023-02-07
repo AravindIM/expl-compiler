@@ -1,4 +1,7 @@
 begin
+    decl
+        int a, b;
+    enddecl
     a = 20;
     repeat
         read(b);
@@ -8,11 +11,11 @@ begin
         if ( b == 1 ) then
             continue;
         endif;
-        if ( b < a ) then
-            write(1355);
+        if ( b > a ) then
+            write("lower it");
         else
-            write(62347);
+            write("raise it");
         endif;
     until ( b == a );
-    write(38041);
+    write("equal");
 end
