@@ -4,6 +4,6 @@ begin
     enddecl
     pointer1 = &a;
     pointer2 = &pointer1;
-    **pointer2 = 3;
+    **pointer2 = 401;
     write(a);
 end
