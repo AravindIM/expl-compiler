@@ -128,7 +128,7 @@ impl Tnode {
         }
     }
 
-    pub fn create_constant(span: Span, dtype: DType, lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>) -> Result<Tnode, LangParseError> {
+    pub fn create_literal(span: Span, dtype: DType, lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>) -> Result<Tnode, LangParseError> {
         let value = lexer.span_str(span).to_string();
         match dtype {
             DType::Data(_) => {
@@ -141,20 +141,21 @@ impl Tnode {
                         }
                     },
                     Primitive::Str => {
-                        return Ok(Tnode::Literal { span, dtype, value: value })
+                        Ok(Tnode::Literal { span, dtype, value: value })
                     }
                     _ => Err(LangParseError(span, format!("ERROR: Invalid datatype for constant {:?}", dtype)))
                 }
             }
             DType::Pointer(_) => {
                 match dtype.get_primitive() {
-                    Primitive::Int | Primitive::Str => {}
-                    _ => return Err(LangParseError(span, format!("ERROR: Invalid datatype for constant {:?}", dtype)))
-                }
-                let parse_result = value.parse::<i32>();
-                match parse_result {
-                    Ok(_) => return Ok(Tnode::Literal { span, dtype, value: value }),
-                    Err(_) => Err(LangParseError(span, format!("ERROR: Invalid pointer {}", value)))
+                    Primitive::Int | Primitive::Str => {
+                        let parse_result = value.parse::<i32>();
+                        match parse_result {
+                            Ok(_) => Ok(Tnode::Literal { span, dtype, value: value }),
+                            Err(_) => Err(LangParseError(span, format!("ERROR: Invalid pointer {}", value)))
+                        }
+                    }
+                    _ => Err(LangParseError(span, format!("ERROR: Invalid datatype for constant {:?}", dtype)))
                 }
             }
         }
@@ -165,30 +166,32 @@ impl Tnode {
         let start_address = ST.lock().unwrap().get_address(&varname).ok_or(LangParseError(name.span(), format!("ERROR: Variable does not exist!")))?;
         let dtype = ST.lock().unwrap().get_type(&varname).ok_or(LangParseError(name.span(), format!("ERROR: Variable does not exist!")))?;
         let size = ST.lock().unwrap().get_dim(&varname).ok_or(LangParseError(span, format!("ERROR: Array size not specified!")))?;
-        let mut address: Tnode = match dtype.clone() {
-            DType::Data(prim) => Tnode::Literal { span: span, dtype: DType::Pointer(Box::new(DType::Data(prim))), value: format!("{}", start_address) },
-            DType::Pointer(pointed) => Tnode::Literal { span: span, dtype: DType::Pointer(pointed), value: format!("{}", start_address) },
-        };
+        let mut address_type = dtype.clone();
+        let mut address = Tnode::Literal { span: span, dtype: DType::Pointer(Box::new(address_type.clone())), value: format!("{}", start_address) };
         match size {
             Dimension::Array(dim_size) => {
                 match index {
                     Dimension::Array(dim_index) => {
-                        if dim_index.len() != dim_size.len() {
-                            return Err(LangParseError(name.span(), format!("ERROR: Array indexing does not match the dimension of the Array!")));
+                        if dim_index.len() > dim_size.len() {
+                            return Err(LangParseError(span, format!("ERROR: Number of indexes found greater than dimension of array `{}`", varname)))
                         }
                         for i in 0..dim_index.len() {
-                            if dim_index[i].get_type().map_err(|_| LangParseError(dim_index[i].span(), format!("ERROR: Invalid type found for array index!"))).unwrap() == DType::Data(Primitive::Int) {
+                            if dim_index[i].get_type().map_err(|_| LangParseError(dim_index[i].span(), format!("ERROR: Invalid type found for array index!")))? == DType::Data(Primitive::Int) {
                                 let mut product = dim_index[i].clone() ;
+                                address_type = DType::Pointer(Box::new(address_type.clone()));
                                 for j in i+1..dim_index.len() {
                                     product = Tnode::Op {span, dtype: DType::Data(Primitive::Int), optype: OpType::Mul, lhs: Box::new(product.clone()), rhs: Some(Box::new(dim_size[j].clone())) };
                                 }
-                                address = Tnode::Op {span, dtype: DType::Data(Primitive::Int), optype: OpType::Add, lhs: Box::new(address), rhs: Some(Box::new(product)) };
+                                address = Tnode::Op {span, dtype: address_type.clone(), optype: OpType::Add, lhs: Box::new(address), rhs: Some(Box::new(product)) };
                             }
                         }
                         // dbg!(address.clone());
-                        return Ok(Tnode::Id{span, dtype: dtype.clone(), name: varname.clone(), address: Box::new(address.clone()) })
+                        if dim_index.len() < dim_size.len() {
+                            return Ok(address);
+                        }
+                        Ok(Tnode::Id{span, dtype: dtype.clone(), name: varname.clone(), address: Box::new(address.clone()) })
                     }
-                    Dimension::Unit => return Err(LangParseError(span, format!("ERROR: Array variable cannot be accessed without specifying the index!")))
+                    Dimension::Unit => return Ok(address)
                 }
             }
             Dimension::Unit => {
@@ -342,16 +345,16 @@ impl Tnode {
     pub fn create_write_node(span:Span, expr: Tnode) -> Result<Tnode, LangParseError> {
         let expr_type = expr.get_type().map_err(|_| LangParseError(span, format!("ERROR: Invalid type found!"))).unwrap();
         match expr_type {
-            DType::Data(Primitive::Int) => return Ok( Tnode::Write{span, expr: Box::new(expr) } ),
-            DType::Data(Primitive::Str) => return Ok( Tnode::Write{span, expr: Box::new(expr) } ),
-            _ => return Err(LangParseError(span, format!("ERROR: Invalid datatype for expression in write(): {:?}", expr_type)))
+            DType::Data(Primitive::Int) => Ok( Tnode::Write{span, expr: Box::new(expr) } ),
+            DType::Data(Primitive::Str) => Ok( Tnode::Write{span, expr: Box::new(expr) } ),
+            _ => Err(LangParseError(span, format!("ERROR: Invalid datatype for expression in write(): {:?}", expr_type)))
         }
     }
 
     pub fn create_flow_node(span:Span, ftype: FlowType, bool_exprs: Option<Vec<Tnode>>, slists: Option<Vec<Tnode>>) -> Result<Tnode, LangParseError> {
         match ftype {
-            FlowType::Continue => return Ok(Tnode::FlowStmt{span, ftype, bool_exprs: None, slists: None }),
-            FlowType::Break => return Ok(Tnode::FlowStmt{span, ftype, bool_exprs: None, slists: None }),
+            FlowType::Continue => Ok(Tnode::FlowStmt{span, ftype, bool_exprs: None, slists: None }),
+            FlowType::Break => Ok(Tnode::FlowStmt{span, ftype, bool_exprs: None, slists: None }),
             _ => {
                 match bool_exprs {
                     Some(bool_list) => {
@@ -361,9 +364,9 @@ impl Tnode {
                                 return Ok(Tnode::FlowStmt{span, ftype, bool_exprs: Some(bool_list.into_iter().map(|b| Box::new(b)).collect()), slists: Some(stmt_list.into_iter().map(|s| Box::new(s)).collect()) });
                             }
                         }
-                        return Err(LangParseError(span, format!("ERROR: No Boolean expression found for {:?}", ftype)))
+                        Err(LangParseError(span, format!("ERROR: No Boolean expression found for {:?}", ftype)))
                     }
-                    None => return Err(LangParseError(span, format!("ERROR: No Boolean expression found for {:?}", ftype)))
+                    None => Err(LangParseError(span, format!("ERROR: No Boolean expression found for {:?}", ftype)))
                 }
             }
         }

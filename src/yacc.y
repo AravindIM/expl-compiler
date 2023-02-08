@@ -145,8 +145,8 @@ Expr -> Result<Tnode, LangParseError>:
       | "AMP" Expr { Tnode::create_op_node($span, OpType::Amp, $2?, None) }
       | "ASTERISK" Expr { Tnode::create_op_node($span, OpType::Deref, $2?, None) }
       | Id { $1 }
-      | "CONST_INT" { Tnode::create_constant($span, DType::Data(Primitive::Int), $lexer) }
-      | "CONST_STR" { Tnode::create_constant($span, DType::Data(Primitive::Str), $lexer) }
+      | "CONST_INT" { Tnode::create_literal($span, DType::Data(Primitive::Int), $lexer) }
+      | "CONST_STR" { Tnode::create_literal($span, DType::Data(Primitive::Str), $lexer) }
       ;
 
 Id -> Result<Tnode, LangParseError>:
