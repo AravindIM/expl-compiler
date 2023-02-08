@@ -323,9 +323,9 @@ impl Tnode {
     }
 
     pub fn create_op_node(span: Span, operation: OpType, lhs: Tnode, rhs: Option<Tnode> ) -> Result<Tnode, LangParseError> {
-        let lhs_type = lhs.get_type().map_err(|_| LangParseError(span, format!("ERROR: Invalid type found!"))).unwrap();
+        let lhs_type = lhs.get_type().map_err(|_| LangParseError(span, format!("ERROR: Invalid type found!")))?;
         let rhs_type = match rhs.clone() {
-            Some(rhs) => Some(rhs.get_type().map_err(|_| LangParseError(span, format!("ERROR: Invalid type found!"))).unwrap()),
+            Some(rhs) => Some(rhs.get_type().map_err(|_| LangParseError(span, format!("ERROR: Invalid type found!")))?),
             None => None
         };
         // dbg!(operation.clone());
@@ -361,14 +361,24 @@ impl Tnode {
                 Err(LangParseError(span, format!("ERROR: Expected type `{}` but found `{}` for assignment of variable `{}`!", dtype, expr_dtype, name)))
             }
             Tnode::Op { span: _, dtype, optype, lhs, .. } => {
-                if optype == OpType::Deref {
-                    if dtype == expr_dtype {
-                        return Ok(Tnode::AsgStmt { span, id: Box::new(id), expr: Box::new(expr) });
+                match optype {
+                    OpType::Deref => {
+                        if dtype == expr_dtype {
+                            return Ok(Tnode::AsgStmt { span, id: Box::new(id), expr: Box::new(expr) });
+                        }
+                        if let Tnode::Id { span, dtype, name, address:_ } = *lhs {
+                            return Err(LangParseError(span, format!("ERROR: Expected type `{}` but found `{}` for assignment of variable `{}`!", dtype, expr_dtype, name)));
+                        }
+                        return Err(LangParseError(span, format!("ERROR: Expected type `{}` but found `{}` for assignment using dereference!", dtype, expr_dtype)))
                     }
-                    if let Tnode::Id { span, dtype, name, address:_ } = *lhs {
-                        return Err(LangParseError(span, format!("ERROR: Expected type `{}` but found `{}` for assignment of variable `{}`!", dtype, expr_dtype, name)));
+                    OpType::Add => {
+                        if let Tnode::Literal { span: _, dtype, .. } = *lhs {
+                            if let DType::Pointer(_) = dtype {
+                                return Err(LangParseError(span, format!("ERROR: Array cannot be reassigned!")))
+                            }
+                        }
                     }
-                    return Err(LangParseError(span, format!("ERROR: Expected type `{}` but found `{}` for assignment using dereference!", dtype, expr_dtype)))
+                    _ => {}
                 }
                 return Err(LangParseError(span, format!("ERROR: Invalid operation `{}` found in LHS of assignment!", optype)))
             }
