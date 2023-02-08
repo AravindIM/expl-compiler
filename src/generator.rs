@@ -423,7 +423,7 @@ impl CodeGenerator {
                 }
                 // return Err(format!("ERROR: Operator {:?} has mismatching operands!", optype).into());
             }
-            Tnode::Constant {span: _, dtype, value } => {
+            Tnode::Literal {span: _, dtype, value } => {
                 let reg1 = self.regpool.get_free()?;
                 match dtype {
                     DType::Data(_) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,

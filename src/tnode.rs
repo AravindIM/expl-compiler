@@ -67,7 +67,7 @@ pub enum Tnode {
         lhs: Box<Tnode>,
         rhs: Option<Box<Tnode>>
     },
-    Constant {
+    Literal {
         span: Span,
         dtype: DType,
         value: String,
@@ -107,7 +107,7 @@ pub enum Tnode {
 impl Tnode {
     pub fn get_type(&self) -> Result<DType, Box<dyn Error>>  {
         match self {
-            Tnode::Constant {span:_, dtype, ..} => Ok(dtype.to_owned()),
+            Tnode::Literal {span:_, dtype, ..} => Ok(dtype.to_owned()),
             Tnode::Id{span:_, dtype: _, name, ..} => ST.lock().unwrap().get_type(name).ok_or(Box::<dyn Error>::from("ERROR: Variable does not exist!")),
             Tnode::Op{span:_, dtype, ..} => Ok(dtype.to_owned()),
             _ => Ok(DType::Data(Primitive::Void)),
@@ -118,7 +118,7 @@ impl Tnode {
         match self {
             Tnode::AsgStmt { span, .. } => *span,
             Tnode::Connector { span, .. } => *span,
-            Tnode::Constant { span, .. } => *span,
+            Tnode::Literal { span, .. } => *span,
             Tnode::FlowStmt { span, .. } => *span,
             Tnode::Id { span, .. } => *span,
             Tnode::NullProg { span } => *span,
@@ -136,12 +136,12 @@ impl Tnode {
                     Primitive::Int => {
                         let parse_result = value.parse::<i32>();
                         match parse_result {
-                            Ok(_) => return Ok(Tnode::Constant { span, dtype, value: value }),
+                            Ok(_) => return Ok(Tnode::Literal { span, dtype, value: value }),
                             Err(_) => return Err(LangParseError(span, format!("ERROR: Invalid integer {}", value)))
                         }
                     },
                     Primitive::Str => {
-                        return Ok(Tnode::Constant { span, dtype, value: value })
+                        return Ok(Tnode::Literal { span, dtype, value: value })
                     }
                     _ => Err(LangParseError(span, format!("ERROR: Invalid datatype for constant {:?}", dtype)))
                 }
@@ -153,7 +153,7 @@ impl Tnode {
                 }
                 let parse_result = value.parse::<i32>();
                 match parse_result {
-                    Ok(_) => return Ok(Tnode::Constant { span, dtype, value: value }),
+                    Ok(_) => return Ok(Tnode::Literal { span, dtype, value: value }),
                     Err(_) => Err(LangParseError(span, format!("ERROR: Invalid pointer {}", value)))
                 }
             }
@@ -166,8 +166,8 @@ impl Tnode {
         let dtype = ST.lock().unwrap().get_type(&varname).ok_or(LangParseError(name.span(), format!("ERROR: Variable does not exist!")))?;
         let size = ST.lock().unwrap().get_dim(&varname).ok_or(LangParseError(span, format!("ERROR: Array size not specified!")))?;
         let mut address: Tnode = match dtype.clone() {
-            DType::Data(prim) => Tnode::Constant { span: span, dtype: DType::Pointer(Box::new(DType::Data(prim))), value: format!("{}", start_address) },
-            DType::Pointer(pointed) => Tnode::Constant { span: span, dtype: DType::Pointer(pointed), value: format!("{}", start_address) },
+            DType::Data(prim) => Tnode::Literal { span: span, dtype: DType::Pointer(Box::new(DType::Data(prim))), value: format!("{}", start_address) },
+            DType::Pointer(pointed) => Tnode::Literal { span: span, dtype: DType::Pointer(pointed), value: format!("{}", start_address) },
         };
         match size {
             Dimension::Array(dim_size) => {

@@ -26,7 +26,7 @@ pub enum Dimension {
 impl Dimension {
     pub fn array_size(size: Option<Dimension>, dim: Tnode) -> Result<Dimension, LangParseError> {
         match dim.clone() {
-            Tnode::Constant {
+            Tnode::Literal {
                 span: _,
                 dtype,
                 value: _,
@@ -220,7 +220,7 @@ impl SymbolTable {
                 let mut dim_size: usize = 1;
                 for dim_entry in dim {
                     match dim_entry {
-                        Tnode::Constant { span, dtype, value } => match dtype {
+                        Tnode::Literal { span, dtype, value } => match dtype {
                             DType::Data(Primitive::Int) => {
                                 let value: usize = value.parse().map_err(|_| {
                                     LangParseError(
