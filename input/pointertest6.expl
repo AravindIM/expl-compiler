@@ -2,6 +2,6 @@ begin
     decl
         str a[10][10], *pointer;
     enddecl
-    a = 1;
+    a[10] = 1;
     write(a[1]);
 end

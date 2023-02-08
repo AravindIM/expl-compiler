@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, fmt};
 use crate::{errors::LangParseError, ST, symboltable::Dimension};
 
 use lrlex::DefaultLexeme;
@@ -12,10 +12,30 @@ pub enum Primitive {
     Void
 }
 
+impl fmt::Display for Primitive {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Primitive::Int => write!(f, "int"),
+            Primitive::Bool => write!(f, "bool"),
+            Primitive::Str => write!(f, "str"),
+            Primitive::Void => write!(f, "void"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum DType {
     Data(Primitive),
     Pointer(Box<DType>)
+}
+
+impl fmt::Display for DType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            DType::Data(ref primitive) => write!(f, "{}", primitive),
+            DType::Pointer(ref dtype) => write!(f, "{}*", dtype),
+        }
+    }
 }
 
 impl DType {
@@ -47,6 +67,26 @@ pub enum OpType {
     Deref
 }
 
+impl fmt::Display for OpType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            OpType::Mod => write!(f, "%"),
+            OpType::Div => write!(f, "/"),
+            OpType::Mul => write!(f, "*"),
+            OpType::Add => write!(f, "+"),
+            OpType::Sub => write!(f, "-"),
+            OpType::Lt => write!(f, "<"),
+            OpType::Gt => write!(f, ">"),
+            OpType::Eq => write!(f, "=="),
+            OpType::NEq => write!(f, "!="),
+            OpType::LEq => write!(f, "<="),
+            OpType::GEq => write!(f, ">="),
+            OpType::Amp => write!(f, "&"),
+            OpType::Deref => write!(f, "*"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum FlowType {
     If,
@@ -55,6 +95,19 @@ pub enum FlowType {
     RepeatUntil,
     Continue,
     Break
+}
+
+impl fmt::Display for FlowType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            FlowType::If => write!(f, "if statement"),
+            FlowType::While => write!(f, "while loop"),
+            FlowType::DoWhile => write!(f, "do-while loop"),
+            FlowType::RepeatUntil => write!(f, "repeat-until loop"),
+            FlowType::Continue => write!(f, "continue statement"),
+            FlowType::Break => write!(f, "break statement")
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -137,13 +190,13 @@ impl Tnode {
                         let parse_result = value.parse::<i32>();
                         match parse_result {
                             Ok(_) => return Ok(Tnode::Literal { span, dtype, value: value }),
-                            Err(_) => return Err(LangParseError(span, format!("ERROR: Invalid integer {}", value)))
+                            Err(_) => return Err(LangParseError(span, format!("ERROR: `{}` is an invalid integer!", value)))
                         }
                     },
                     Primitive::Str => {
                         Ok(Tnode::Literal { span, dtype, value: value })
                     }
-                    _ => Err(LangParseError(span, format!("ERROR: Invalid datatype for constant {:?}", dtype)))
+                    _ => Err(LangParseError(span, format!("ERROR: Invalid datatype `{}` found for constant!", dtype)))
                 }
             }
             DType::Pointer(_) => {
@@ -152,10 +205,10 @@ impl Tnode {
                         let parse_result = value.parse::<i32>();
                         match parse_result {
                             Ok(_) => Ok(Tnode::Literal { span, dtype, value: value }),
-                            Err(_) => Err(LangParseError(span, format!("ERROR: Invalid pointer {}", value)))
+                            Err(_) => Err(LangParseError(span, format!("ERROR: `{}` is an invalid pointer!", value)))
                         }
                     }
-                    _ => Err(LangParseError(span, format!("ERROR: Invalid datatype for constant {:?}", dtype)))
+                    _ => Err(LangParseError(span, format!("ERROR: Invalid datatype `{}` found for constant!", dtype)))
                 }
             }
         }
@@ -173,7 +226,7 @@ impl Tnode {
                 match index {
                     Dimension::Array(dim_index) => {
                         if dim_index.len() > dim_size.len() {
-                            return Err(LangParseError(span, format!("ERROR: Number of indexes found greater than dimension of array `{}`", varname)))
+                            return Err(LangParseError(span, format!("ERROR: Number of indexes found to be greater than dimension of array `{}`!", varname)))
                         }
                         for i in 0..dim_index.len() {
                             if dim_index[i].get_type().map_err(|_| LangParseError(dim_index[i].span(), format!("ERROR: Invalid type found for array index!")))? == DType::Data(Primitive::Int) {
@@ -280,7 +333,7 @@ impl Tnode {
         if operation.clone() == OpType::Amp {
             match lhs.clone() {
                 Tnode::Id { .. } => {}
-                _ => return Err(LangParseError(span, format!("ERROR: {:?} operator can only be used with Identifiers", operation)))
+                _ => return Err(LangParseError(span, format!("ERROR: `{}` operator can only be used with identifiers!", operation)))
             }
 
         }
@@ -291,8 +344,8 @@ impl Tnode {
             }
         }
         match rhs {
-            Some(_) => Err(LangParseError(span, format!("ERROR: LHS (Type: {:?}) and RHS (Type: {:?}) have incompatible types for the operator: {:?}",lhs_type, rhs_type, operation))),
-            None => Err(LangParseError(span, format!("ERROR: The Type: {:?} is incompatible type for the operator: {:?}",lhs_type, operation)))
+            Some(_) => Err(LangParseError(span, format!("ERROR: LHS (Type: `{}`) and RHS (Type: `{}`) have incompatible types for the operator `{}`!",lhs_type, rhs_type.unwrap(), operation))),
+            None => Err(LangParseError(span, format!("ERROR: The type `{}` is incompatible type for the operator `{}`!",lhs_type, operation)))
         }
     }
 
@@ -305,7 +358,7 @@ impl Tnode {
                 if dtype == expr_dtype {
                     return Ok( Tnode::AsgStmt{span, id: Box::new(id), expr: Box::new(expr)} );
                 }
-                Err(LangParseError(span, format!("ERROR: Expected type {:?} but found {:?} for variable '{}'!", dtype, expr_dtype, name)))
+                Err(LangParseError(span, format!("ERROR: Expected type `{}` but found `{}` for assignment of variable `{}`!", dtype, expr_dtype, name)))
             }
             Tnode::Op { span: _, dtype, optype, lhs, .. } => {
                 if optype == OpType::Deref {
@@ -313,13 +366,13 @@ impl Tnode {
                         return Ok(Tnode::AsgStmt { span, id: Box::new(id), expr: Box::new(expr) });
                     }
                     if let Tnode::Id { span, dtype, name, address:_ } = *lhs {
-                        return Err(LangParseError(span, format!("ERROR: Expected type {:?} but found {:?} for assignment of '*{}'!", dtype, expr_dtype, name)));
+                        return Err(LangParseError(span, format!("ERROR: Expected type `{}` but found `{}` for assignment of variable `{}`!", dtype, expr_dtype, name)));
                     }
-                    return Err(LangParseError(span, format!("ERROR: Expected type {:?} but found {:?} for assignment using deref!", dtype, expr_dtype)))
+                    return Err(LangParseError(span, format!("ERROR: Expected type `{}` but found `{}` for assignment using dereference!", dtype, expr_dtype)))
                 }
-                return Err(LangParseError(span, format!("ERROR: Invalid operation {:?} found in LHS of assignment!", optype)))
+                return Err(LangParseError(span, format!("ERROR: Invalid operation `{}` found in LHS of assignment!", optype)))
             }
-            _ => Err(LangParseError(span, format!("ERROR: Missing identifier or dereference in lhs for assignment")))
+            _ => Err(LangParseError(span, format!("ERROR: Missing identifier or dereference in lhs for assignment!")))
         }
     }
 
@@ -336,7 +389,7 @@ impl Tnode {
                     return Ok( Tnode::Read{span, id: Box::new(id) } );
                 }
             }
-            _ => return Err(LangParseError(span, format!("ERROR: Invalid datatype for identifier in read(): {:?}", id_type)))
+            _ => return Err(LangParseError(span, format!("ERROR: Invalid datatype `{}` for identifier in read()!", id_type)))
         }
 
         Err(LangParseError(span, format!("ERROR: Invalid identifier!")))
@@ -347,7 +400,7 @@ impl Tnode {
         match expr_type {
             DType::Data(Primitive::Int) => Ok( Tnode::Write{span, expr: Box::new(expr) } ),
             DType::Data(Primitive::Str) => Ok( Tnode::Write{span, expr: Box::new(expr) } ),
-            _ => Err(LangParseError(span, format!("ERROR: Invalid datatype for expression in write(): {:?}", expr_type)))
+            _ => Err(LangParseError(span, format!("ERROR: Invalid datatype `{}` for expression in write()!", expr_type)))
         }
     }
 
@@ -364,9 +417,9 @@ impl Tnode {
                                 return Ok(Tnode::FlowStmt{span, ftype, bool_exprs: Some(bool_list.into_iter().map(|b| Box::new(b)).collect()), slists: Some(stmt_list.into_iter().map(|s| Box::new(s)).collect()) });
                             }
                         }
-                        Err(LangParseError(span, format!("ERROR: No Boolean expression found for {:?}", ftype)))
+                        Err(LangParseError(span, format!("ERROR: No boolean expression found for {}!", ftype)))
                     }
-                    None => Err(LangParseError(span, format!("ERROR: No Boolean expression found for {:?}", ftype)))
+                    None => Err(LangParseError(span, format!("ERROR: No boolean expression found for {}!", ftype)))
                 }
             }
         }
@@ -377,7 +430,7 @@ impl Tnode {
         if let Tnode::Id{span:_, dtype: _, name, ..} = self {
             return ST.lock().unwrap().get_address(name).ok_or(Box::<dyn Error>::from("ERROR: Variable does not exist!"));
         }
-        Err("ERROR: Cannot get address of anything other than Identifier".into())
+        Err("ERROR: Cannot get address of anything other than Identifier!".into())
     }
 
 }
