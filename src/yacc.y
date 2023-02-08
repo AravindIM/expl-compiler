@@ -56,9 +56,14 @@ VarList -> Result<VarMap, LangParseError>:
 Var -> Result<VarData, LangParseError>:
        "ID" { Ok( VarData{ name: $1.unwrap(), dtype: DType::Data(Primitive::Void), dim: Dimension::Unit } ) }
       | "ID" VarSize { Ok( VarData{ name: $1.unwrap(), dtype: DType::Data(Primitive::Void), dim: $2? } ) }
-      | "ASTERISK" "ID" { Ok( VarData{ name: $2.unwrap(), dtype: DType::Pointer(Primitive::Void), dim: Dimension::Unit } ) }
-      | "ASTERISK" "ID" VarSize { Ok( VarData{ name: $2.unwrap(), dtype: DType::Pointer(Primitive::Void), dim: $3? } ) }
+      | AsteriskList "ID" { Ok( VarData{ name: $2.unwrap(), dtype: $1?, dim: Dimension::Unit } ) }
+      | AsteriskList "ID" VarSize { Ok( VarData{ name: $2.unwrap(), dtype: $1?, dim: $3? } ) }
       ;
+
+AsteriskList -> Result<DType, LangParseError>:
+                AsteriskList "ASTERISK" { Ok( DType::Pointer(Box::new($1?)) ) }
+              | "ASTERISK" { Ok( DType::Pointer(Box::new(DType::Data(Primitive::Void))) ) }
+             ;
 
 VarSize -> Result<Dimension, LangParseError>:
            VarSize "[" Expr "]" { Dimension::array_size(Some($1?), $3?) }

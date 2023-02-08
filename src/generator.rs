@@ -1,7 +1,7 @@
 use crate::ST;
 use crate::label::LabelManager;
 use crate::register::RegPool;
-use crate::tnode::{FlowType, OpType, Tnode, DType, Primitive};
+use crate::tnode::{FlowType, OpType, Tnode, DType};
 use lrlex::DefaultLexeme;
 use lrpar::NonStreamingLexer;
 
@@ -80,7 +80,7 @@ impl CodeGenerator {
         node: &Tnode,
         object_file: &mut File,
     ) -> Result<Option<usize>, Box<dyn Error>> {
-        dbg!(node.clone());
+        // dbg!(node.clone());
         match node {
             Tnode::NullProg {span: _} => return Ok(None),
             Tnode::Connector {span: _, lhs, rhs } => {
@@ -426,11 +426,9 @@ impl CodeGenerator {
             Tnode::Constant {span: _, dtype, value } => {
                 let reg1 = self.regpool.get_free()?;
                 match dtype {
-                    DType::Data(Primitive::Int) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
-                    DType::Data(Primitive::Str) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
-                    DType::Pointer(Primitive::Int) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
-                    DType::Pointer(Primitive::Str) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
-                    _ => return Err(format!("ERROR: Invalid Constant!").into())
+                    DType::Data(_) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
+                    DType::Pointer(_) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
+                    // _ => return Err(format!("ERROR: Invalid Constant!").into())
                 }
                 return Ok(Some(reg1));
             }

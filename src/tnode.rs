@@ -15,7 +15,19 @@ pub enum Primitive {
 #[derive(Debug, Clone, PartialEq)]
 pub enum DType {
     Data(Primitive),
-    Pointer(Primitive)
+    Pointer(Box<DType>)
+}
+
+impl DType {
+    pub fn get_primitive(&self) -> Primitive {
+        Self::recursive_primitive(self)
+    }
+    fn recursive_primitive(dtype: &DType) -> Primitive {
+        match dtype {
+            DType::Data(prim) => prim.clone(),
+            DType::Pointer(pointed) => Self::recursive_primitive(pointed)
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -119,29 +131,32 @@ impl Tnode {
     pub fn create_constant(span: Span, dtype: DType, lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>) -> Result<Tnode, LangParseError> {
         let value = lexer.span_str(span).to_string();
         match dtype {
-            DType::Data(Primitive::Int) => {
-                let parse_result = value.parse::<i32>();
-                match parse_result {
-                    Ok(_) => return Ok(Tnode::Constant { span, dtype, value: value }),
-                    Err(_) => Err(LangParseError(span, format!("ERROR: Invalid integer {}", value)))
+            DType::Data(_) => {
+                match dtype.get_primitive() {
+                    Primitive::Int => {
+                        let parse_result = value.parse::<i32>();
+                        match parse_result {
+                            Ok(_) => return Ok(Tnode::Constant { span, dtype, value: value }),
+                            Err(_) => return Err(LangParseError(span, format!("ERROR: Invalid integer {}", value)))
+                        }
+                    },
+                    Primitive::Str => {
+                        return Ok(Tnode::Constant { span, dtype, value: value })
+                    }
+                    _ => Err(LangParseError(span, format!("ERROR: Invalid datatype for constant {:?}", dtype)))
                 }
             }
-            DType::Data(Primitive::Str) => return Ok(Tnode::Constant { span, dtype, value: value }),
-            DType::Pointer(Primitive::Int) => {
+            DType::Pointer(_) => {
+                match dtype.get_primitive() {
+                    Primitive::Int | Primitive::Str => {}
+                    _ => return Err(LangParseError(span, format!("ERROR: Invalid datatype for constant {:?}", dtype)))
+                }
                 let parse_result = value.parse::<i32>();
                 match parse_result {
                     Ok(_) => return Ok(Tnode::Constant { span, dtype, value: value }),
                     Err(_) => Err(LangParseError(span, format!("ERROR: Invalid pointer {}", value)))
                 }
             }
-            DType::Pointer(Primitive::Str) => {
-                let parse_result = value.parse::<i32>();
-                match parse_result {
-                    Ok(_) => return Ok(Tnode::Constant { span, dtype, value: value }),
-                    Err(_) => Err(LangParseError(span, format!("ERROR: Invalid pointer {}", value)))
-                }
-            }
-            _ => Err(LangParseError(span, format!("ERROR: Invalid datatype for constant {:?}", dtype)))
         }
     }
 
@@ -151,8 +166,8 @@ impl Tnode {
         let dtype = ST.lock().unwrap().get_type(&varname).ok_or(LangParseError(name.span(), format!("ERROR: Variable does not exist!")))?;
         let size = ST.lock().unwrap().get_dim(&varname).ok_or(LangParseError(span, format!("ERROR: Array size not specified!")))?;
         let mut address: Tnode = match dtype.clone() {
-            DType::Data(prim) => Tnode::Constant { span: span, dtype: DType::Pointer(prim), value: format!("{}", start_address) },
-            DType::Pointer(prim) => Tnode::Constant { span: span, dtype: DType::Pointer(prim), value: format!("{}", start_address) },
+            DType::Data(prim) => Tnode::Constant { span: span, dtype: DType::Pointer(Box::new(DType::Data(prim))), value: format!("{}", start_address) },
+            DType::Pointer(pointed) => Tnode::Constant { span: span, dtype: DType::Pointer(pointed), value: format!("{}", start_address) },
         };
         match size {
             Dimension::Array(dim_size) => {
@@ -185,18 +200,70 @@ impl Tnode {
         }
     }
 
-    pub fn get_op_rule(operation: OpType, lhs_type: DType, rhs_type: Option<DType>) -> Option<(DType, DType, Option<DType>)> {
-        let rule_list = match operation {
-            OpType::Mod | OpType::Div | OpType::Mul | OpType::Add | OpType::Sub => vec![(DType::Data(Primitive::Int), DType::Data(Primitive::Int), Some(DType::Data(Primitive::Int))), (DType::Pointer(Primitive::Int), DType::Pointer(Primitive::Int), Some(DType::Data(Primitive::Int))), (DType::Pointer(Primitive::Int), DType::Data(Primitive::Int), Some(DType::Pointer(Primitive::Int)))],
-            OpType::Lt | OpType::Gt | OpType::Eq | OpType::NEq |OpType::LEq | OpType::GEq => vec![(DType::Data(Primitive::Bool), DType::Data(Primitive::Int), Some(DType::Data(Primitive::Int))), (DType::Data(Primitive::Bool), DType::Data(Primitive::Str), Some(DType::Data(Primitive::Str)))],
-            OpType::Amp => vec![(DType::Pointer(Primitive::Int), DType::Data(Primitive::Int), None), (DType::Pointer(Primitive::Str), DType::Data(Primitive::Str), None)],
-            OpType::Deref => vec![(DType::Data(Primitive::Int), DType::Pointer(Primitive::Int), None), (DType::Data(Primitive::Str), DType::Pointer(Primitive::Str), None)],
-        };
-        let select_rule = rule_list.iter().map(|v| v.clone()).filter(|(_, in_type1, in_type2)| lhs_type == *in_type1 && rhs_type == *in_type2 ).collect::<Vec<(DType, DType, Option<DType>)>>();
-        if select_rule.len() == 0 {
-            return None;
+    pub fn get_op_rule(operation: OpType, lhs_type: DType, rhs_type: Option<DType>) -> Option<DType> {
+        match operation {
+            OpType::Mod | OpType::Div | OpType::Mul => {
+                match rhs_type {
+                    Some(rhs_type) => {
+                        if lhs_type == rhs_type && lhs_type == DType::Data(Primitive::Int) {
+                            return Some(lhs_type);
+                        }
+                        None
+                    }
+                    None => None
+                }
+            },
+            OpType::Add | OpType::Sub => {
+                match rhs_type {
+                    Some(rhs_type) => {
+                        match lhs_type {
+                            DType::Data(Primitive::Int) => {
+                                match rhs_type {
+                                    DType::Data(Primitive::Int) | DType::Pointer(_) => Some(rhs_type),
+                                    _ => None,
+                                }
+                            }
+                            DType::Pointer(_) => {
+                                match rhs_type {
+                                    DType::Data(Primitive::Int) => Some(lhs_type),
+                                    _ => None
+                                }
+                            }
+                            _ => None
+                        }
+                    }
+                    None => None
+                }
+            },
+            OpType::Lt | OpType::Gt | OpType::Eq | OpType::NEq |OpType::LEq | OpType::GEq => {
+                match rhs_type {
+                    Some(rhs_type) => {
+                        if lhs_type == rhs_type{
+                            return match lhs_type {
+                                DType::Data(Primitive::Int) | DType::Pointer(_) => Some(DType::Data(Primitive::Bool)),
+                                _ => None
+                            }
+                        }
+                        None
+                    }
+                    None => None
+                }
+            },
+            OpType::Amp => {
+                match lhs_type {
+                    DType::Data(Primitive::Int) => Some(DType::Pointer(Box::new(lhs_type))),
+                    DType::Data(Primitive::Str) => Some(DType::Pointer(Box::new(lhs_type))),
+                    DType::Pointer(_) => Some(DType::Pointer(Box::new(lhs_type))),
+                    _ => None
+                }
+            }
+            OpType::Deref => {
+                match lhs_type {
+                    DType::Pointer(pointed) => Some(*pointed),
+                    _ => None
+                }
+            }
         }
-        return Some(select_rule[0].clone())
     }
 
     pub fn create_op_node(span: Span, operation: OpType, lhs: Tnode, rhs: Option<Tnode> ) -> Result<Tnode, LangParseError> {
@@ -214,10 +281,10 @@ impl Tnode {
             }
 
         }
-        if let Some(type_spec) = select_rule {
+        if let Some(output_type) = select_rule {
             return match rhs {
-                Some(rhs) => Ok(Tnode::Op {span, dtype: type_spec.0, optype: operation, lhs: Box::new(lhs), rhs: Some(Box::new(rhs)) }),
-                None => Ok(Tnode::Op {span, dtype: type_spec.0, optype: operation, lhs: Box::new(lhs), rhs: None }),
+                Some(rhs) => Ok(Tnode::Op {span, dtype: output_type, optype: operation, lhs: Box::new(lhs), rhs: Some(Box::new(rhs)) }),
+                None => Ok(Tnode::Op {span, dtype: output_type, optype: operation, lhs: Box::new(lhs), rhs: None }),
             }
         }
         match rhs {

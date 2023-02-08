@@ -108,16 +108,20 @@ pub struct Declaration {
 impl Declaration {
     pub fn new(prim: Primitive, variables: VarMap) -> Declaration {
         let mut varlist = variables.clone();
-        for (_, (_, dtype_value, _)) in varlist.iter_mut() {
-            match dtype_value {
-                DType::Data(_) => *dtype_value = DType::Data(prim.clone()),
-                DType::Pointer(_) => *dtype_value = DType::Pointer(prim.clone())
-            }
+        for (_, (_, dtype, _)) in varlist.iter_mut() {
+            *dtype = Self::update_prim(&prim, dtype)
         }
         // dbg!(variables.clone());
         // dbg!(varlist.clone());
         Declaration {
             variables: varlist.clone(),
+        }
+    }
+
+    fn update_prim(prim: &Primitive, dtype: &DType) -> DType {
+        match dtype {
+            DType::Data(_) => DType::Data(prim.clone()),
+            DType::Pointer(pointed) => DType::Pointer(Box::new(Self::update_prim(prim, pointed)))
         }
     }
 

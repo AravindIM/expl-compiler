@@ -1,0 +1,9 @@
+begin
+    decl
+        int a, *pointer1, **pointer2;
+    enddecl
+    pointer1 = &a;
+    pointer2 = &pointer1;
+    **pointer2 = 3;
+    write(a);
+end
