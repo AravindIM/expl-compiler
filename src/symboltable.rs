@@ -160,6 +160,7 @@ impl Declaration {
                 ));
             }
         }
+        self.variables.extend(decl.variables);
         Ok(self.clone())
     }
 
