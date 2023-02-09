@@ -91,7 +91,7 @@ impl CodeGenerator {
             Tnode::Read {span: _, id } => {
                 if let Tnode::Id {span: _, dtype: _, name: _, address } = &**id {
                     let reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
-                    let used_reg_list = self.regpool.get_used()?;
+                    let mut used_reg_list = self.regpool.get_used()?;
                     for used_reg in used_reg_list.iter() {
                         writeln!(object_file, "PUSH R{}", used_reg)?;
                     }
@@ -111,6 +111,7 @@ impl CodeGenerator {
                     writeln!(object_file, "POP R{}", reg1)?;
                     self.regpool.set_free(reg1);
                     self.regpool.set_free(reg2);
+                    used_reg_list.reverse();
                     for used_reg in used_reg_list.iter() {
                         writeln!(object_file, "POP R{}", used_reg)?;
                     }
@@ -120,7 +121,7 @@ impl CodeGenerator {
             }
             Tnode::Write {span: _, expr } => {
                 if let Some(reg1) = self.ast_to_code(lexer, &*expr, object_file)? {
-                    let used_reg_list = self.regpool.get_used()?;
+                    let  mut used_reg_list = self.regpool.get_used()?;
                     for used_reg in used_reg_list.iter() {
                         writeln!(object_file, "PUSH R{}", used_reg)?;
                     }
@@ -140,6 +141,7 @@ impl CodeGenerator {
                     writeln!(object_file, "POP R{}", reg2)?;
                     self.regpool.set_free(reg2);
                     self.regpool.set_free(reg1);
+                    used_reg_list.reverse();
                     for used_reg in used_reg_list.iter() {
                         writeln!(object_file, "POP R{}", used_reg)?;
                     }
