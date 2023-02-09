@@ -1,13 +1,6 @@
 %%
 begin "BEGIN"
 end "END"
-<<<<<<< HEAD
-=======
-; "ENDSTMT"
-= "ASG"
-[a-z] "ID"
-[0-9]+ "NUM"
->>>>>>> main
 read "READ"
 write "WRITE"
 if "IF"
@@ -21,7 +14,6 @@ repeat "REPEAT"
 until "UNTIL"
 break "BREAK"
 continue "CONTINUE"
-<<<<<<< HEAD
 decl "DECL"
 enddecl "ENDDECL"
 int "INT"
@@ -34,10 +26,6 @@ str "STR"
 = "ASG"
 <= "LE"
 >= "GE"
-=======
->= "LE"
-<= "GE"
->>>>>>> main
 != "NE"
 == "EQ"
 < "LT"
@@ -50,10 +38,7 @@ str "STR"
 \& "AMP"
 \( "("
 \) ")"
-<<<<<<< HEAD
 \[ "["
 \] "]"
-=======
->>>>>>> main
 [\s]+ ;
 . "UNMATCHED"

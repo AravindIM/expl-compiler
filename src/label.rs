@@ -42,11 +42,7 @@ impl LabelManager {
                 if let Some(label) = label_captures.get(1) {
                     self.label_map.insert(
                         String::from(label.as_str()),
-<<<<<<< HEAD
                         2056 + 2 * (index - self.current_map - 8),
-=======
-                        2056 + 2 * (index + 1 - self.current_map - 8),
->>>>>>> main
                     );
                     // println!("index: {} count: {}", index, self.count);
                     self.current_map += 1;

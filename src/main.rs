@@ -1,11 +1,6 @@
 use std::{env, fs, process};
-<<<<<<< HEAD
 use compiler::errors::LangParseError;
 use compiler::generator::CodeGenerator;
-=======
-use compiler::errors::ParseError;
-use compiler::generator::code_gen;
->>>>>>> main
 use compiler::utils::fetch_filenames;
 
 use lrlex::lrlex_mod;
@@ -42,13 +37,8 @@ fn main() {
 
     match res {
         Some(parse_res) => match parse_res {
-<<<<<<< HEAD
             Ok(node) => code_gen.generate(&lexer, &node, &output_file).expect("ERROR: Code generation halted!"),
             Err(LangParseError(span, message)) => {
-=======
-            Ok(node) => code_gen(&lexer, &node, &output_file).expect("ERROR: Code generation halted!"),
-            Err(ParseError(span, message)) => {
->>>>>>> main
                 let ((start_line, start_col), (_, _)) = lexer.line_col(span);
                 eprintln!("ERROR: Parsing error at line {start_line} column {start_col}:");
                 eprintln!("{message}");
