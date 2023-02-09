@@ -1,7 +1,10 @@
 begin
+<<<<<<< HEAD
     decl
         int a, b;
     enddecl
+=======
+>>>>>>> main
     a = 20;
     repeat
         read(b);
@@ -11,6 +14,7 @@ begin
         if ( b == 1 ) then
             continue;
         endif;
+<<<<<<< HEAD
         if ( b > a ) then
             write("lower it");
         else
@@ -18,4 +22,13 @@ begin
         endif;
     until ( b == a );
     write("equal");
+=======
+        if ( b < a ) then
+            write(1355);
+        else
+            write(62347);
+        endif;
+    until ( b == a );
+    write(38041);
+>>>>>>> main
 end
