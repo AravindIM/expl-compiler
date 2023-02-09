@@ -1,0 +1,8 @@
+begin
+    decl
+        int a[10], *pointer;
+    enddecl
+    pointer = a;
+    *(pointer+1) = 30;
+    write(a[1]);
+end

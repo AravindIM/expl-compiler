@@ -1,0 +1,9 @@
+begin
+    decl
+        int a, b, *pointer;
+    enddecl
+    pointer = &a;
+    b = 45;
+    a = *(&a + 1);
+    write(a);
+end

@@ -1,10 +1,13 @@
 %%
 begin "BEGIN"
 end "END"
+<<<<<<< HEAD
+=======
 ; "ENDSTMT"
 = "ASG"
 [a-z] "ID"
 [0-9]+ "NUM"
+>>>>>>> main
 read "READ"
 write "WRITE"
 if "IF"
@@ -18,17 +21,39 @@ repeat "REPEAT"
 until "UNTIL"
 break "BREAK"
 continue "CONTINUE"
+<<<<<<< HEAD
+decl "DECL"
+enddecl "ENDDECL"
+int "INT"
+str "STR"
+[_A-Za-z]+[_A-Za-z0-9]* "ID"
+[0-9]+ "CONST_INT"
+"[^\n]*" "CONST_STR"
+; "ENDSTMT"
+, ","
+= "ASG"
+<= "LE"
+>= "GE"
+=======
 >= "LE"
 <= "GE"
+>>>>>>> main
 != "NE"
 == "EQ"
 < "LT"
 > "GT"
 / "DIV"
-\* "MUL"
+\* "ASTERISK"
 \+ "ADD"
 \- "SUB"
+% "MOD"
+\& "AMP"
 \( "("
 \) ")"
+<<<<<<< HEAD
+\[ "["
+\] "]"
+=======
+>>>>>>> main
 [\s]+ ;
 . "UNMATCHED"
