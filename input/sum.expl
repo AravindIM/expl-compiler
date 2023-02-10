@@ -1,5 +1,4 @@
 begin
-<<<<<<< HEAD
     decl
         int num, sum;
         str mesg;
@@ -15,13 +14,4 @@ begin
     write(sum);
     mesg = "good bye";
     write(mesg);
-=======
-    a = 0;
-    read(b);
-    while ( b != 0 ) do
-        a = a + b;
-        read(b);
-    endwhile;
-    write(a);
->>>>>>> main
 end

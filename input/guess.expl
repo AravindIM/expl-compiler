@@ -1,5 +1,4 @@
 begin
-<<<<<<< HEAD
     decl
         int correct_answer, your_guess;
     enddecl
@@ -14,17 +13,4 @@ begin
         read(your_guess);
     endwhile;
     write("equal");
-=======
-    a = 20;
-    read(b);
-    while( b != a ) do
-        if ( b < a ) then
-            write(1355);
-        else
-            write(62347);
-        endif;
-        read(b);
-    endwhile;
-    write(38041);
->>>>>>> main
 end
