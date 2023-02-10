@@ -267,7 +267,10 @@ impl CodeGenerator {
                     let slist = slists.get(0).unwrap();
     
                     let do_start_label = self.labelmanager.get_free_label();
-                    self.labelmanager.push_label(do_start_label);
+                    // self.labelmanager.push_label(do_start_label);
+
+                    let do_condition_label = self.labelmanager.get_free_label();
+                    self.labelmanager.push_label(do_condition_label);
     
                     let do_end_label = self.labelmanager.get_free_label();
                     self.labelmanager.push_label(do_end_label);
@@ -275,6 +278,9 @@ impl CodeGenerator {
                     writeln!(object_file, "L{}:", do_start_label)?;
     
                     self.ast_to_code(lexer, &*slist, object_file)?;
+
+                    writeln!(object_file, "L{}:", do_condition_label)?;
+
     
                     let bool_reg =
                         self.ast_to_code(lexer, &*bool_expr, object_file)?.unwrap();
@@ -295,7 +301,10 @@ impl CodeGenerator {
                     let slist = slists.get(0).unwrap();
     
                     let repeat_start_label = self.labelmanager.get_free_label();
-                    self.labelmanager.push_label(repeat_start_label);
+                    // self.labelmanager.push_label(repeat_start_label);
+
+                    let repeat_condition_label = self.labelmanager.get_free_label();
+                    self.labelmanager.push_label(repeat_condition_label);
     
                     let repeat_end_label = self.labelmanager.get_free_label();
                     self.labelmanager.push_label(repeat_end_label);
@@ -303,6 +312,8 @@ impl CodeGenerator {
                     writeln!(object_file, "L{}:", repeat_start_label)?;
     
                     self.ast_to_code(lexer, &*slist, object_file)?;
+
+                    writeln!(object_file, "L{}:", repeat_condition_label)?;
     
                     let bool_reg =
                         self.ast_to_code(lexer, &*bool_expr, object_file)?.unwrap();
