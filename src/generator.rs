@@ -1,7 +1,7 @@
-use crate::ST;
 use crate::label::LabelManager;
 use crate::register::RegPool;
-use crate::tnode::{FlowType, OpType, Tnode, DType};
+use crate::tnode::{DType, FlowType, OpType, Tnode, FDef};
+use crate::ST;
 use lrlex::DefaultLexeme;
 use lrpar::NonStreamingLexer;
 
@@ -18,7 +18,10 @@ pub struct CodeGenerator {
 
 impl CodeGenerator {
     pub fn new() -> CodeGenerator {
-        CodeGenerator{regpool: RegPool::new(), labelmanager: LabelManager::new()}
+        CodeGenerator {
+            regpool: RegPool::new(),
+            labelmanager: LabelManager::new(),
+        }
     }
 
     fn write_header(&self, object_file: &mut File) -> Result<(), Box<dyn Error>> {
@@ -31,9 +34,10 @@ impl CodeGenerator {
         writeln!(object_file, "0")?;
         writeln!(object_file, "0")?;
         writeln!(object_file, "MOV SP, {}", ST.lock().unwrap().get_bp())?;
+        writeln!(object_file, "CALL F0")?;
         Ok(())
     }
-    
+
     fn write_tail(&self, object_file: &mut File) -> Result<(), Box<dyn Error>> {
         writeln!(object_file, "MOV R0, \"Exit\"")?;
         writeln!(object_file, "PUSH R0")?;
@@ -48,24 +52,25 @@ impl CodeGenerator {
     pub fn generate(
         &mut self,
         lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>,
-        node: &Tnode,
+        flist: &Vec<FDef>,
         filename: &str,
     ) -> Result<(), Box<dyn Error>> {
         let object_filename = filename.replace(".xsm", ".o");
-    
+
         File::create(&object_filename)?;
         File::create(&filename)?;
-    
+
         let mut object_file = File::options().append(true).open(&object_filename)?;
         let mut exec_file = File::options().write(true).open(&filename)?;
-    
+
         self.write_header(&mut object_file)?;
-        self.ast_to_code(
-            lexer,
-            &node,
-            &mut object_file,
-        )?;
+
         self.write_tail(&mut object_file)?;
+
+        for func in flist {
+            writeln!(object_file, "F{}:", func.flabel)?;
+            self.ast_to_code(lexer, &func.body, &mut object_file)?;
+        }
         let object_code = fs::read_to_string(&object_filename)
             .expect(&format!("ERROR: Unable to read object file {}!", &filename));
         self.labelmanager.generate_label_map(&object_code)?;
@@ -73,7 +78,7 @@ impl CodeGenerator {
         write!(exec_file, "{}", exec_code)?;
         Ok(())
     }
-    
+
     fn ast_to_code(
         &mut self,
         lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>,
@@ -82,14 +87,20 @@ impl CodeGenerator {
     ) -> Result<Option<usize>, Box<dyn Error>> {
         // dbg!(node.clone());
         match node {
-            Tnode::NullProg {span: _} => return Ok(None),
-            Tnode::Connector {span: _, lhs, rhs } => {
+            Tnode::NullProg { span: _ } => return Ok(None),
+            Tnode::Connector { span: _, lhs, rhs } => {
                 self.ast_to_code(lexer, &*lhs, object_file)?;
                 self.ast_to_code(lexer, &*rhs, object_file)?;
                 return Ok(None);
             }
-            Tnode::Read {span: _, id } => {
-                if let Tnode::Id {span: _, dtype: _, name: _, address } = &**id {
+            Tnode::Read { span: _, id } => {
+                if let Tnode::Id {
+                    span: _,
+                    dtype: _,
+                    name: _,
+                    address,
+                } = &**id
+                {
                     let reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
                     let mut used_reg_list = self.regpool.get_used()?;
                     for used_reg in used_reg_list.iter() {
@@ -119,9 +130,9 @@ impl CodeGenerator {
                 }
                 return Err("ERROR: read() has invalid argument!".into());
             }
-            Tnode::Write {span: _, expr } => {
+            Tnode::Write { span: _, expr } => {
                 if let Some(reg1) = self.ast_to_code(lexer, &*expr, object_file)? {
-                    let  mut used_reg_list = self.regpool.get_used()?;
+                    let mut used_reg_list = self.regpool.get_used()?;
                     for used_reg in used_reg_list.iter() {
                         writeln!(object_file, "PUSH R{}", used_reg)?;
                     }
@@ -151,7 +162,12 @@ impl CodeGenerator {
             }
             Tnode::AsgStmt { span: _, id, expr } => {
                 match id.as_ref() {
-                    Tnode::Id {span: _, dtype:_, name: _, address } => {
+                    Tnode::Id {
+                        span: _,
+                        dtype: _,
+                        name: _,
+                        address,
+                    } => {
                         // *dtype = expr.get_type();
                         let reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
                         let reg2 = self.ast_to_code(lexer, &*expr, object_file)?.unwrap();
@@ -160,7 +176,13 @@ impl CodeGenerator {
                         self.regpool.set_free(reg2);
                         Ok(None)
                     }
-                    Tnode::Op { span: _, dtype:_, optype, lhs, .. } => {
+                    Tnode::Op {
+                        span: _,
+                        dtype: _,
+                        optype,
+                        lhs,
+                        ..
+                    } => {
                         if *optype == OpType::Deref {
                             let reg1 = self.ast_to_code(lexer, lhs, object_file)?.unwrap();
                             let reg2 = self.ast_to_code(lexer, &*expr, object_file)?.unwrap();
@@ -171,7 +193,9 @@ impl CodeGenerator {
                         }
                         Err("ERROR: Incorrect Operation found in LHS of assignment".into())
                     }
-                    _ => Err("ERROR: Missing identifier or dereference in lhs for assignment".into())
+                    _ => {
+                        Err("ERROR: Missing identifier or dereference in lhs for assignment".into())
+                    }
                 }
             }
             Tnode::FlowStmt {
@@ -202,17 +226,16 @@ impl CodeGenerator {
                     let slists = slists.as_ref().unwrap();
                     let if_slist = slists.get(0).unwrap();
                     let else_slist = slists.get(1);
-    
-                    let bool_reg =
-                        self.ast_to_code(lexer, &*bool_expr, object_file)?.unwrap();
-    
+
+                    let bool_reg = self.ast_to_code(lexer, &*bool_expr, object_file)?.unwrap();
+
                     let if_slist_end_label = self.labelmanager.get_free_label();
                     writeln!(object_file, "JZ R{}, L{}", bool_reg, if_slist_end_label)?;
-    
+
                     self.regpool.set_free(bool_reg);
-    
+
                     self.ast_to_code(lexer, &*if_slist, object_file)?;
-    
+
                     match else_slist {
                         Some(else_stmts) => {
                             let else_end_label = self.labelmanager.get_free_label();
@@ -226,7 +249,7 @@ impl CodeGenerator {
                             writeln!(object_file, "L{}:", if_slist_end_label)?;
                         }
                     }
-    
+
                     Ok(None)
                 }
                 FlowType::While => {
@@ -234,28 +257,27 @@ impl CodeGenerator {
                     let bool_expr = bool_exprs.get(0).unwrap();
                     let slists = slists.as_ref().unwrap();
                     let slist = slists.get(0).unwrap();
-    
+
                     let while_start_label = self.labelmanager.get_free_label();
                     self.labelmanager.push_label(while_start_label);
-    
+
                     let while_end_label = self.labelmanager.get_free_label();
                     self.labelmanager.push_label(while_end_label);
-    
+
                     writeln!(object_file, "L{}:", while_start_label)?;
-    
-                    let bool_reg =
-                        self.ast_to_code(lexer, &*bool_expr, object_file)?.unwrap();
-    
+
+                    let bool_reg = self.ast_to_code(lexer, &*bool_expr, object_file)?.unwrap();
+
                     writeln!(object_file, "JZ R{}, L{}", bool_reg, while_end_label)?;
-    
+
                     self.regpool.set_free(bool_reg);
-    
+
                     self.ast_to_code(lexer, &*slist, object_file)?;
-    
+
                     writeln!(object_file, "JMP L{}", while_start_label)?;
-    
+
                     writeln!(object_file, "L{}:", while_end_label)?;
-    
+
                     self.labelmanager.pop_label()?;
                     self.labelmanager.pop_label()?;
                     Ok(None)
@@ -265,31 +287,29 @@ impl CodeGenerator {
                     let bool_expr = bool_exprs.get(0).unwrap();
                     let slists = slists.as_ref().unwrap();
                     let slist = slists.get(0).unwrap();
-    
+
                     let do_start_label = self.labelmanager.get_free_label();
                     // self.labelmanager.push_label(do_start_label);
 
                     let do_condition_label = self.labelmanager.get_free_label();
                     self.labelmanager.push_label(do_condition_label);
-    
+
                     let do_end_label = self.labelmanager.get_free_label();
                     self.labelmanager.push_label(do_end_label);
-    
+
                     writeln!(object_file, "L{}:", do_start_label)?;
-    
+
                     self.ast_to_code(lexer, &*slist, object_file)?;
 
                     writeln!(object_file, "L{}:", do_condition_label)?;
 
-    
-                    let bool_reg =
-                        self.ast_to_code(lexer, &*bool_expr, object_file)?.unwrap();
-    
+                    let bool_reg = self.ast_to_code(lexer, &*bool_expr, object_file)?.unwrap();
+
                     writeln!(object_file, "JNZ R{}, L{}", bool_reg, do_start_label)?;
                     writeln!(object_file, "L{}:", do_end_label)?;
-    
+
                     self.regpool.set_free(bool_reg);
-    
+
                     self.labelmanager.pop_label()?;
                     self.labelmanager.pop_label()?;
                     Ok(None)
@@ -299,36 +319,40 @@ impl CodeGenerator {
                     let bool_expr = bool_exprs.get(0).unwrap();
                     let slists = slists.as_ref().unwrap();
                     let slist = slists.get(0).unwrap();
-    
+
                     let repeat_start_label = self.labelmanager.get_free_label();
                     // self.labelmanager.push_label(repeat_start_label);
 
                     let repeat_condition_label = self.labelmanager.get_free_label();
                     self.labelmanager.push_label(repeat_condition_label);
-    
+
                     let repeat_end_label = self.labelmanager.get_free_label();
                     self.labelmanager.push_label(repeat_end_label);
-    
+
                     writeln!(object_file, "L{}:", repeat_start_label)?;
-    
+
                     self.ast_to_code(lexer, &*slist, object_file)?;
 
                     writeln!(object_file, "L{}:", repeat_condition_label)?;
-    
-                    let bool_reg =
-                        self.ast_to_code(lexer, &*bool_expr, object_file)?.unwrap();
-    
+
+                    let bool_reg = self.ast_to_code(lexer, &*bool_expr, object_file)?.unwrap();
+
                     writeln!(object_file, "JZ R{}, L{}", bool_reg, repeat_start_label)?;
                     writeln!(object_file, "L{}:", repeat_end_label)?;
-    
+
                     self.regpool.set_free(bool_reg);
-    
+
                     self.labelmanager.pop_label()?;
                     self.labelmanager.pop_label()?;
                     Ok(None)
                 }
             },
-            Tnode::Id {span: _, dtype: _, name: _, address } => {
+            Tnode::Id {
+                span: _,
+                dtype: _,
+                name: _,
+                address,
+            } => {
                 // dbg!(name.clone());
                 // let id = var.name;
                 let reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
@@ -404,9 +428,7 @@ impl CodeGenerator {
                                 self.regpool.set_free(reg2);
                                 return Ok(Some(reg1));
                             }
-                            _ => {
-                                return Err("ERROR: Unary Operator got two operands!".into())
-                            }
+                            _ => return Err("ERROR: Unary Operator got two operands!".into()),
                         }
                     }
                     None => {
@@ -414,15 +436,27 @@ impl CodeGenerator {
                             OpType::Amp => {
                                 let reg1: usize;
                                 match *lhs.clone() {
-                                    Tnode::Id { span:_, dtype:_, name:_, address } => {
+                                    Tnode::Id {
+                                        span: _,
+                                        dtype: _,
+                                        name: _,
+                                        address,
+                                    } => {
                                         // dbg!(address.clone());
-                                        reg1 = self.ast_to_code(lexer, &address, object_file)?.unwrap();
+                                        reg1 = self
+                                            .ast_to_code(lexer, &address, object_file)?
+                                            .unwrap();
                                         // dbg!("getting address parsed");
                                     }
-                                    _ => return Err("ERROR: & operator can only be used on identifiers".into())
+                                    _ => {
+                                        return Err(
+                                            "ERROR: & operator can only be used on identifiers"
+                                                .into(),
+                                        )
+                                    }
                                 }
                                 return Ok(Some(reg1));
-                            },
+                            }
                             OpType::Deref => {
                                 let reg1 = self.ast_to_code(lexer, &*lhs, object_file)?.unwrap();
                                 let reg2 = self.regpool.get_free()?;
@@ -430,13 +464,17 @@ impl CodeGenerator {
                                 self.regpool.set_free(reg1);
                                 Ok(Some(reg2))
                             }
-                            _ => return Err("ERROR: Binary Operator only got one operand".into())
+                            _ => return Err("ERROR: Binary Operator only got one operand".into()),
                         }
                     }
                 }
                 // return Err(format!("ERROR: Operator {:?} has mismatching operands!", optype).into());
             }
-            Tnode::Literal {span: _, dtype, value } => {
+            Tnode::Literal {
+                span: _,
+                dtype,
+                value,
+            } => {
                 let reg1 = self.regpool.get_free()?;
                 match dtype {
                     DType::Data(_) => writeln!(object_file, "MOV R{}, {}", reg1, value)?,
@@ -445,7 +483,17 @@ impl CodeGenerator {
                 }
                 return Ok(Some(reg1));
             }
+            Tnode::ReturnStmt { expr, .. } => {
+                let reg1 = self.ast_to_code(lexer, &*expr, object_file)?.unwrap();
+                let reg2 = self.regpool.get_free()?;
+                writeln!(object_file, "MOV R{}, {}", reg2, "BP")?;
+                writeln!(object_file, "SUB R{}, {}", reg2, 2)?;
+                writeln!(object_file, "MOV [R{}], R{}", reg2, reg1)?;
+                writeln!(object_file, "RET")?;
+                self.regpool.set_free(reg1);
+                self.regpool.set_free(reg2);
+                Ok(None)
+            }
         }
     }
 }
-

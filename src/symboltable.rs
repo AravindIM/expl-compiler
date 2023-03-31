@@ -6,16 +6,13 @@ use lrpar::{Lexeme, NonStreamingLexer, Span};
 
 use crate::{
     errors::LangParseError,
-    tnode::{DType, Tnode, Primitive},
+    tnode::{DType, Primitive, Tnode},
 };
 
-pub type VarMap = IndexMap<String, (Span, DType, Dimension)>;
+use std::error::Error;
 
-pub struct VarData {
-    pub name: DefaultLexeme,
-    pub dtype: DType,
-    pub dim: Dimension
-}
+pub type ParamList = IndexMap<String, DType>;
+pub type VarMap = IndexMap<String, (Span, DType, Dimension, Option<ParamList>, Option<String>)>;
 
 #[derive(Debug, Clone)]
 pub enum Dimension {
@@ -35,7 +32,7 @@ impl Dimension {
                     DType::Data(Primitive::Int) => {
                         // let append_dim: usize = value.parse().map_err(|_| LangParseError(span, format!("ERROR: Invalid size specified in array!")))?;
                         return match size {
-                            Some(size) => match size{
+                            Some(size) => match size {
                                 Dimension::Array(prevdim) => {
                                     let mut new_dim = prevdim.clone();
                                     new_dim.push(dim);
@@ -46,7 +43,7 @@ impl Dimension {
                                     format!("ERROR: Cannot add dimension to non-array variables!"),
                                 )),
                             },
-                            None => Ok(Dimension::Array(vec![dim]))
+                            None => Ok(Dimension::Array(vec![dim])),
                         };
                     }
                     _ => {
@@ -82,8 +79,8 @@ impl Dimension {
                         ))
                     }
                 },
-                None => Ok(Dimension::Array(vec![index]))
-            }
+                None => Ok(Dimension::Array(vec![index])),
+            };
         } else {
             return Err(LangParseError(
                 index.span(),
@@ -98,107 +95,93 @@ pub struct TableEntry {
     pub dtype: DType,
     pub dim: Dimension,
     pub binding: usize,
-}
-
-#[derive(Debug, Clone)]
-pub struct Declaration {
-    pub variables: VarMap,
-}
-
-impl Declaration {
-    pub fn new(prim: Primitive, variables: VarMap) -> Declaration {
-        let mut varlist = variables.clone();
-        for (_, (_, dtype, _)) in varlist.iter_mut() {
-            *dtype = Self::update_prim(&prim, dtype)
-        }
-        // dbg!(variables.clone());
-        // dbg!(varlist.clone());
-        Declaration {
-            variables: varlist.clone(),
-        }
-    }
-
-    fn update_prim(prim: &Primitive, dtype: &DType) -> DType {
-        match dtype {
-            DType::Data(_) => DType::Data(prim.clone()),
-            DType::Pointer(pointed) => DType::Pointer(Box::new(Self::update_prim(prim, pointed)))
-        }
-    }
-
-    pub fn variables(
-        prevlist: Option<VarMap>,
-        variable: VarData,
-        lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>,
-    ) -> Result<VarMap, LangParseError> {
-        let varname = lexer.span_str(variable.name.span()).to_string();
-        let mut prevlist = match prevlist {
-            Some(prev) => prev.clone(),
-            None => IndexMap::new(),
-        };
-
-        if prevlist.contains_key(&varname) {
-            let var_data = prevlist.get(&varname).unwrap();
-            // dbg!("Same line");
-            return Err(LangParseError(
-                var_data.0,
-                format!("ERROR: Variable declared multiple times!"),
-            ));
-        }
-
-        prevlist.insert(varname, (variable.name.span(), variable.dtype.clone(), variable.dim.clone()));
-        Ok(prevlist)
-    }
-
-    pub fn join(&mut self, decl: Declaration) -> Result<Declaration, LangParseError> {
-        for varname in decl.variables.keys() {
-            let var_data = decl.variables.get(varname).unwrap();
-            if self.variables.contains_key(varname) {
-                // dbg!("Different line");
-                return Err(LangParseError(
-                    var_data.0,
-                    format!("ERROR: Variable declared multiple times!"),
-                ));
-            }
-        }
-        self.variables.extend(decl.variables);
-        Ok(self.clone())
-    }
-
-    pub fn attach(
-        decl: Result<(), LangParseError>,
-        slist: Result<Tnode, LangParseError>,
-    ) -> Result<Tnode, LangParseError> {
-        if let Err(err) = decl {
-            return Err(err);
-        }
-        return slist;
-    }
+    pub params: Option<IndexMap<String, DType>>,
+    pub flabel: Option<usize>,
 }
 
 #[derive(Debug)]
 pub struct SymbolTable {
     bp: usize,
+    fl: usize,
     table: HashMap<String, TableEntry>,
+    queue: IndexMap<String, (DType, Dimension, Option<ParamList>, Option<usize>)>,
 }
 
 impl SymbolTable {
     pub fn new() -> SymbolTable {
         SymbolTable {
-            bp: 4096,
+            bp: 0,
+            fl: 0,
             table: HashMap::new(),
+            queue: IndexMap::new(),
         }
+    }
+
+    pub fn get_next_flabel(&mut self) -> usize {
+        self.fl += 1;
+        self.fl
     }
 
     pub fn get_bp(&self) -> usize {
         self.bp
     }
 
-    pub fn append_decl(&mut self, decl: Declaration) -> Result<(), LangParseError> {
-        for varname in decl.variables.keys() {
-            let var_data = decl.variables.get(varname).unwrap().clone();
-            self.append(varname.to_string(), var_data.1.clone(), var_data.2)?;
+    fn update_prim(prim: &Primitive, dtype: &DType) -> DType {
+        match dtype {
+            DType::Data(_) => DType::Data(prim.clone()),
+            DType::Pointer(pointed) => DType::Pointer(Box::new(Self::update_prim(prim, pointed))),
         }
-        // dbg!(self);
+    }
+
+    pub fn reset(&mut self) {
+        self.bp = 0;
+        self.table.clear();
+        self.queue.clear();
+    }
+
+    pub fn enqueue(
+        &mut self,
+        varname: DefaultLexeme,
+        vartype: DType,
+        vardim: Dimension,
+        params: Option<IndexMap<String, DType>>,
+        lexer: &dyn NonStreamingLexer<DefaultLexeme, u32>,
+    ) -> Result<(), LangParseError> {
+        let span = varname.span();
+        let varname = lexer.span_str(varname.span()).to_string();
+        if self.queue.contains_key(&varname) || self.table.contains_key(&varname) {
+            return Err(LangParseError(
+                span,
+                format!("ERROR: Variable declared multiple times!"),
+            ));
+        }
+        match params {
+            Some(_) => {
+                let flabel = self.get_next_flabel();
+                self.queue
+                    .insert(varname.to_owned(), (vartype, vardim, params, Some(flabel)))
+            }
+            None => self
+                .queue
+                .insert(varname.to_owned(), (vartype, vardim, params, None)),
+        };
+        Ok(())
+    }
+
+    pub fn dequeue(&mut self, varprim: Primitive) -> Result<(), LangParseError> {
+        for varname in self.queue.clone().keys() {
+            let vardata = self.queue.get(varname).unwrap();
+            let datatype = vardata.0.clone();
+            SymbolTable::update_prim(&varprim, &datatype);
+            self.append(
+                varname.to_owned(),
+                datatype.clone(),
+                vardata.1.clone(),
+                vardata.2.clone(),
+                vardata.3,
+            )?;
+        }
+        self.queue.clear();
         Ok(())
     }
 
@@ -207,6 +190,8 @@ impl SymbolTable {
         name: String,
         dtype: DType,
         dim: Dimension,
+        params: Option<IndexMap<String, DType>>,
+        flabel: Option<usize>,
     ) -> Result<(), LangParseError> {
         self.table.insert(
             name,
@@ -214,6 +199,8 @@ impl SymbolTable {
                 dtype,
                 dim: dim.clone(),
                 binding: self.bp,
+                params,
+                flabel,
             },
         );
         match dim {
@@ -255,6 +242,13 @@ impl SymbolTable {
         Ok(())
     }
 
+    pub fn contains(&self, name: &String) -> bool {
+        match self.table.get(name) {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
     pub fn get_type(&self, name: &String) -> Option<DType> {
         match self.table.get(name) {
             Some(table_entry) => Some(table_entry.dtype.clone()),
@@ -274,5 +268,39 @@ impl SymbolTable {
             Some(table_entry) => Some(table_entry.dim.clone()),
             None => None,
         }
+    }
+
+    pub fn get_params(&self, name: &String) -> Result<Option<ParamList>, Box<dyn Error>> {
+        match self.table.get(name) {
+            Some(table_entry) => Ok(table_entry.params.clone()),
+            None => Err("ERROR: Cannot find the entry!".into()),
+        }
+    }
+
+    pub fn get_flabel(&self, name: &String) -> Result<Option<usize>, Box<dyn Error>> {
+        match self.table.get(name) {
+            Some(table_entry) => Ok(table_entry.flabel),
+            None => Err("ERROR: Cannot find the entry!".into()),
+        }
+    }
+
+    pub fn create_params(
+        oldp: Option<ParamList>,
+        newp: Option<(String, DType, Span)>,
+    ) -> Result<ParamList, LangParseError> {
+        let mut plist = match oldp {
+            Some(oldp) => oldp,
+            None => ParamList::new(),
+        };
+        if let Some(newp) = newp {
+            if plist.contains_key(&newp.0) {
+                return Err(LangParseError(
+                    newp.2,
+                    format!("ERROR: Parameter already declared before!"),
+                ));
+            }
+            plist.insert(newp.0, newp.1);
+        }
+        Ok(plist)
     }
 }
