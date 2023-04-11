@@ -10,7 +10,7 @@ use crate::{
         exception::{ArrayError, SymbolTableError, SymbolType, TypeError},
         symbol::Symbol,
     },
-    exception::semantic::SemanticError,
+    exception::{semantic::SemanticError, compiler::CompilerError},
     function::ParamList,
     GST, LST,
 };
@@ -153,4 +153,36 @@ pub fn append_fn(
         },
     );
     Ok(())
+}
+
+pub fn get_global_symbol(name: &String, stype: SymbolType) -> Result<Symbol, CompilerError> {
+    GST.lock().unwrap().get(&name, stype)
+}
+
+pub fn get_local_symbol(name: &String, stype: SymbolType) -> Result<Symbol, CompilerError> {
+    LST.lock().unwrap().get(&name, stype)
+}
+
+pub fn get_gst_tail() -> isize {
+    GST.lock().unwrap().get_tail()
+}
+
+pub fn get_lst_tail() -> isize {
+    LST.lock().unwrap().get_tail()
+}
+
+pub fn reset_gst() {
+    GST.lock().unwrap().reset();
+}
+
+pub fn reset_lst() {
+    LST.lock().unwrap().reset();
+}
+
+pub fn dequeue_gst(prim: Primitive) -> Result<(), SemanticError> {
+    GST.lock().unwrap().dequeue(prim)
+}
+
+pub fn dequeue_lst(prim: Primitive) -> Result<(), SemanticError> {
+    LST.lock().unwrap().dequeue(prim)
 }

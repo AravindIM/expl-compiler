@@ -1,3 +1,4 @@
+use crate::builder::symboltable::get_gst_tail;
 use crate::enums::ast::Ast;
 use crate::enums::exception::{AssignError, OpError};
 use crate::enums::flow::FlowType;
@@ -5,7 +6,6 @@ use crate::enums::operator::OpType;
 use crate::exception::compiler::CompilerError;
 use crate::label::LabelManager;
 use crate::register::RegPool;
-use crate::GST;
 use crate::{enums::dtype::DType, function::FnDef};
 
 use std::{
@@ -39,7 +39,7 @@ impl CodeGenerator {
         writeln!(
             object_file,
             "MOV SP, {}",
-            base_address + GST.lock().unwrap().get_tail()
+            base_address + get_gst_tail()
         )?;
         writeln!(object_file, "MOV BP, SP")?;
         writeln!(object_file, "PUSH R0")?;

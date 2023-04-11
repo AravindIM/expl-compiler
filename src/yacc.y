@@ -51,7 +51,7 @@ GDeclList -> Result<(), SemanticError>:
           ;
 
 GDecl -> Result<(), SemanticError>:
-         Type GidList ";" { $2?; GST.lock().unwrap().dequeue($1?) }
+         Type GidList ";" { $2?; dequeue_gst($1?) }
        ;
 
 
@@ -128,7 +128,7 @@ LDeclList -> Result<(), SemanticError>:
           ;
 
 LDecl -> Result<(), SemanticError>:
-         Type LidList ";" { $2?; LST.lock().unwrap().dequeue($1?) }
+         Type LidList ";" { $2?; dequeue_lst($1?) }
        ;
 
 
@@ -139,10 +139,10 @@ LidList -> Result<(), SemanticError>:
 
 Lid -> Result<(), SemanticError>:
        Id { append_lvar($1?, DType::Data(Primitive::Void), false, $lexer) }
-      /* | Id VarSize { LST.lock().unwrap().enqueue($1?, DType::Data(Primitive::Void), $2?, None, $lexer) } */
-      /* | Id "(" ParamList ")" { LST.lock().unwrap($1?, DType::Data(Primitive::Void), $2?, None, $lexer) } */
+      /* | Id VarSize { append_lvar($1?, $2?, false, $lexer) } */
+      /* | Id "(" ParamList ")" {  } */
       | AsteriskList Id { append_lvar($2?, $1?, false, $lexer) }
-      /* | AsteriskList Id VarSize { LST.lock.unwrap().enqueue($2?, $1?, $3?, None, $lexer ) } */
+      /* | AsteriskList Id VarSize { append_lvar($2?, $1?, false, $lexer ) } */
       ;
 
 /* Slist */
@@ -271,11 +271,10 @@ use compiler::enums::{
 };
 use compiler::exception::semantic::SemanticError;
 use compiler::function::ParamList;
-use compiler::{GST, LST};
 use lrlex::DefaultLexeme;
 use compiler::function::FnDef;
 use compiler::builder::function::{create_fn, create_fn_list, create_params, create_args};
-use compiler::builder::symboltable::{append_gvar, append_lvar, append_fn};
+use compiler::builder::symboltable::{append_gvar, append_lvar, append_fn, dequeue_lst, dequeue_gst};
 use compiler::builder::operand::{create_id, create_literal};
 use compiler::builder::operator::create_op;
 use compiler::builder::statement::{create_return, create_read, create_write, create_assign, create_flow, create_nullprog, create_connector};

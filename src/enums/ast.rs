@@ -4,7 +4,8 @@ use super::{
     flow::FlowType,
     operator::OpType,
 };
-use crate::{exception::compiler::CompilerError, GST};
+use crate::builder::symboltable::get_global_symbol;
+use crate::exception::compiler::CompilerError;
 use lrpar::Span;
 
 #[derive(Debug, Clone)]
@@ -110,10 +111,7 @@ impl Ast {
 
     pub fn get_binding(&self) -> Result<isize, CompilerError> {
         match self {
-            Ast::Var { name, .. } => GST
-                .lock()
-                .unwrap()
-                .get(name, SymbolType::Var)?
+            Ast::Var { name, .. } => get_global_symbol(name, SymbolType::Var)?
                 .get_binding(),
             _ => Err(CompilerError::ast(ASTError::NoBinding)),
         }

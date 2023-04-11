@@ -11,10 +11,9 @@ use crate::{
     },
     exception::semantic::SemanticError,
     function::{FnDef, ParamList},
-    GST, LST,
 };
 
-use super::symboltable::append_lvar;
+use super::symboltable::{append_lvar, get_global_symbol, reset_lst, get_lst_tail};
 
 pub fn create_fn(
     rtype: DType,
@@ -33,10 +32,7 @@ pub fn create_fn(
     let params = params.unwrap_or(IndexMap::new());
 
     if name != "main" {
-        symbol = GST
-            .lock()
-            .unwrap()
-            .get(&name, SymbolType::Fn)
+        symbol = get_global_symbol(&name, SymbolType::Fn)
             .map_err(SemanticError::from_compiler(span))?;
         decl_params = symbol
             .get_params()
@@ -114,7 +110,7 @@ pub fn create_fn(
     let body = body?;
 
     if let Ast::Connector { lhs: _, rhs, .. } = body.clone() {
-        let mut lsize = LST.lock().unwrap().get_tail();
+        let mut lsize = get_lst_tail();
         // dbg!(lsize);
         if lsize < 0 {
             lsize = 0;
@@ -166,7 +162,7 @@ pub fn create_fn_list(
         None => vec![],
     };
     prevl.push(fdef);
-    LST.lock().unwrap().reset();
+    reset_lst();
     Ok(prevl)
 }
 
@@ -186,7 +182,7 @@ pub fn create_params(
         }
         None => {
             plist = ParamList::new();
-            LST.lock().unwrap().reset();
+            reset_lst();
         }
     };
     append_lvar(lexeme, dtype.clone(), true, lexer)?;

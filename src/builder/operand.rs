@@ -11,8 +11,9 @@ use crate::{
         symbol::Symbol,
     },
     exception::semantic::SemanticError,
-    GST, LST,
 };
+
+use super::symboltable::{get_local_symbol, get_global_symbol};
 
 pub fn create_literal(
     span: Span,
@@ -46,9 +47,9 @@ pub fn create_id(
 ) -> Result<Ast, SemanticError> {
     let name_span = name.span();
     let name = lexer.span_str(name_span).to_string();
-    let symbol = match LST.lock().unwrap().get(&name, SymbolType::Var) {
+    let symbol = match get_local_symbol(&name, SymbolType::Var) {
         Ok(symbol) => Ok(symbol),
-        Err(_) => GST.lock().unwrap().get(&name, SymbolType::Var),
+        Err(_) => get_global_symbol(&name, SymbolType::Var),
     }
     .map_err(SemanticError::from_compiler(name_span))?;
     match symbol {
