@@ -16,6 +16,7 @@ use std::{
 pub struct CodeGenerator {
     regpool: RegPool,
     labelmanager: LabelManager,
+    stackstart: usize,
 }
 
 impl CodeGenerator {
@@ -23,11 +24,11 @@ impl CodeGenerator {
         CodeGenerator {
             regpool: RegPool::new(),
             labelmanager: LabelManager::new(),
+            stackstart: 4095,
         }
     }
 
     fn write_header(&self, object_file: &mut File) -> Result<(), CompilerError> {
-        let base_address = 4095;
         writeln!(object_file, "0")?;
         writeln!(object_file, "2056")?;
         writeln!(object_file, "0")?;
@@ -39,7 +40,7 @@ impl CodeGenerator {
         writeln!(
             object_file,
             "MOV SP, {}",
-            base_address + get_gst_tail()
+            self.stackstart as isize + get_gst_tail()
         )?;
         writeln!(object_file, "MOV BP, SP")?;
         writeln!(object_file, "PUSH R0")?;
@@ -171,14 +172,9 @@ impl CodeGenerator {
                     writeln!(object_file, "MOV R{}, -1", reg2)?;
                     writeln!(object_file, "PUSH R{}", reg2)?;
                     writeln!(object_file, "PUSH R{}", reg1)?;
-                    writeln!(object_file, "PUSH R{}", reg2)?;
-                    writeln!(object_file, "PUSH R{}", reg2)?;
+                    writeln!(object_file, "ADD SP, 2")?;
                     writeln!(object_file, "CALL 0")?;
-                    writeln!(object_file, "POP R{}", reg2)?;
-                    writeln!(object_file, "POP R{}", reg1)?;
-                    writeln!(object_file, "POP R{}", reg1)?;
-                    writeln!(object_file, "POP R{}", reg1)?;
-                    writeln!(object_file, "POP R{}", reg1)?;
+                    writeln!(object_file, "SUB SP, 5")?;
 
                     self.regpool.free(reg1)?;
                     self.regpool.free(reg2)?;
@@ -200,14 +196,10 @@ impl CodeGenerator {
                 writeln!(object_file, "MOV R{}, -2", reg2)?;
                 writeln!(object_file, "PUSH R{}", reg2)?;
                 writeln!(object_file, "PUSH R{}", reg1)?;
-                writeln!(object_file, "PUSH R{}", reg2)?;
-                writeln!(object_file, "PUSH R{}", reg2)?;
+                writeln!(object_file, "ADD SP, 2")?;
                 writeln!(object_file, "CALL 0")?;
-                writeln!(object_file, "POP R{}", reg1)?;
-                writeln!(object_file, "POP R{}", reg2)?;
-                writeln!(object_file, "POP R{}", reg2)?;
-                writeln!(object_file, "POP R{}", reg2)?;
-                writeln!(object_file, "POP R{}", reg2)?;
+                writeln!(object_file, "SUB SP, 5")?;
+                
                 self.regpool.free(reg2)?;
                 self.regpool.free(reg1)?;
 
@@ -492,7 +484,7 @@ impl CodeGenerator {
                                         if is_local {
                                             writeln!(object_file, "ADD R{}, BP", reg1)?;
                                         } else {
-                                            writeln!(object_file, "ADD R{}, 4095", reg1)?;
+                                            writeln!(object_file, "ADD R{}, {}", reg1, self.stackstart)?;
                                         }
                                         // dbg!("getting address parsed");
                                     }
