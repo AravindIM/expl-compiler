@@ -1,0 +1,45 @@
+decl
+    int f(int x, int y), g(int x, int y);
+enddecl
+
+int f(int x, int y){
+    decl
+    int ret;
+    enddecl
+    begin
+    if(y==0)
+    then
+    ret = x;
+    else
+    ret = f(g(x-1, y-1), y-1);
+    endif;
+    return ret;
+    end
+}
+
+int g(int x, int y){
+    decl
+    int ret;
+    enddecl
+    begin
+    if(y==0)
+    then
+    ret = x;
+    else
+    ret = g(f(x-1, y-1), y-1);
+    endif;
+    return ret;
+    end
+}
+
+int main(){
+    decl
+    int a, b;
+    enddecl
+    begin
+    read(a);
+    read(b);
+    write(f(a, b));
+    return 0;
+    end
+}
