@@ -1,6 +1,7 @@
-use std::collections::HashMap;
 use regex::Regex;
-use std::error::Error;
+use std::collections::HashMap;
+
+use crate::exception::compiler::CompilerError;
 
 pub struct LabelManager {
     current_insert: usize,
@@ -29,14 +30,14 @@ impl LabelManager {
         self.label_stack.push(label);
     }
 
-    pub fn pop_label(&mut self) -> Result<usize, Box<dyn Error>> {
+    pub fn pop_label(&mut self) -> Result<usize, CompilerError> {
         self.label_stack
             .pop()
-            .ok_or(Box::<dyn Error>::from("ERROR: Label stack is empty!"))
+            .ok_or(CompilerError("ERROR: Label stack is empty!".to_string()))
     }
 
-    pub fn generate_label_map(&mut self, object_code: &str) -> Result<(), Box<dyn Error>> {
-        let label_regex = Regex::new(r"(L[0-9]+):")?;
+    pub fn generate_label_map(&mut self, object_code: &str) -> Result<(), CompilerError> {
+        let label_regex = Regex::new(r"([LF][0-9]+):")?;
         for (index, code) in object_code.lines().enumerate() {
             if let Some(label_captures) = label_regex.captures(code) {
                 if let Some(label) = label_captures.get(1) {
@@ -52,8 +53,8 @@ impl LabelManager {
         Ok(())
     }
 
-    pub fn translate_label(&self, object_code: &str) -> Result<String, Box<dyn Error>> {
-        let label_regex = Regex::new(r"L[0-9]+:\n")?;
+    pub fn translate_label(&self, object_code: &str) -> Result<String, CompilerError> {
+        let label_regex = Regex::new(r"[LF][0-9]+:\n")?;
         let mut out_code = label_regex.replace_all(object_code, "").to_string();
         for (key, value) in self.label_map.iter() {
             out_code = out_code.replace(key, format!("{value}").as_str());

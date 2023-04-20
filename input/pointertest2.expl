@@ -1,8 +1,0 @@
-begin
-    decl
-        int a, *pointer;
-    enddecl
-    pointer = &a;
-    *pointer = 42;
-    write(a);
-end

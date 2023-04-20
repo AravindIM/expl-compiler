@@ -1,0 +1,16 @@
+decl
+  int a[10], i, n;
+enddecl
+
+int main()
+{
+  begin
+
+    n = 10;
+
+    write(&a[0]);
+    write(&i);
+
+    return 0;
+  end
+}

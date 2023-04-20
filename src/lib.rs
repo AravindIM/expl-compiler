@@ -1,15 +1,18 @@
-pub mod errors;
+pub mod builder;
 pub mod generator;
-pub mod tnode;
-pub mod register;
 pub mod label;
-pub mod utils;
+pub mod register;
 pub mod symboltable;
+pub mod utils;
 use std::sync::Mutex;
+pub mod enums;
+pub mod exception;
+pub mod function;
 
 use lazy_static::lazy_static;
-pub use symboltable::{SymbolTable, Declaration};
+pub use symboltable::SymbolTable;
 
-lazy_static!(
-    pub static ref ST: Mutex<SymbolTable> = Mutex::new(SymbolTable::new());
-);
+lazy_static! {
+    pub static ref GST: Mutex<SymbolTable> = Mutex::new(SymbolTable::new());
+    pub static ref LST: Mutex<SymbolTable> = Mutex::new(SymbolTable::new());
+}

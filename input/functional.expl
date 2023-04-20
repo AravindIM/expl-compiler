@@ -1,0 +1,22 @@
+decl
+    int func(int func);
+enddecl
+
+int func(int func) {
+    begin
+    write(&func);
+    read(func);
+    write(func);
+    return func;
+    end
+}
+
+int main () {
+    decl
+    int a;
+    enddecl
+    begin
+    func(a);
+    return 0;
+    end
+}
