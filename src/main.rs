@@ -1,7 +1,7 @@
-use std::{env, fs, process};
-use compiler::errors::LangParseError;
+use compiler::exception::semantic::SemanticError;
 use compiler::generator::CodeGenerator;
 use compiler::utils::fetch_filenames;
+use std::{env, fs, process};
 
 use lrlex::lrlex_mod;
 use lrpar::{lrpar_mod, NonStreamingLexer};
@@ -14,7 +14,7 @@ fn main() {
 
     let args: Vec<String> = env::args().collect();
 
-    const  DEFAULT_OUTPUT_FILE:&str = "output.xsm";
+    const DEFAULT_OUTPUT_FILE: &str = "output.xsm";
 
     let (input_file, output_file) = fetch_filenames(args, DEFAULT_OUTPUT_FILE);
 
@@ -37,13 +37,17 @@ fn main() {
 
     match res {
         Some(parse_res) => match parse_res {
-            Ok(node) => code_gen.generate(&lexer, &node, &output_file).expect("ERROR: Code generation halted!"),
-            Err(LangParseError(span, message)) => {
-                let ((start_line, start_col), (_, _)) = lexer.line_col(span);
-                eprintln!("ERROR: Parsing error at line {start_line} column {start_col}:");
-                eprintln!("{message}");
+            Ok(node) => {
+                if let Err(e) = code_gen.generate(&node, &output_file) {
+                    panic!("{}", e);
+                }
             }
-        }
-        None => eprintln!("ERROR: Parsing failed!")
+            Err(SemanticError(span, message)) => {
+                let ((start_line, start_col), (_, _)) = lexer.line_col(span);
+                eprintln!("ERROR: Semantic error at line {start_line} column {start_col}:");
+                eprintln!("ERROR: {message}");
+            }
+        },
+        None => eprintln!("ERROR: Parsing failed!"),
     }
 }
