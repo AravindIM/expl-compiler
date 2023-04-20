@@ -26,6 +26,7 @@ pub enum Symbol {
         dtype: DType,
         params: Option<IndexMap<String, DType>>,
         flabel: usize,
+        defined: bool,
     },
 }
 
@@ -55,12 +56,14 @@ impl Symbol {
                 name,
                 params,
                 flabel,
+                defined,
                 ..
             } => Self::Fn {
                 name,
                 dtype,
                 params,
                 flabel,
+                defined
             },
         }
     }
@@ -104,8 +107,8 @@ impl Symbol {
             Self::GVar { name, .. } | Self::LVar { name, .. } => {
                 Err(CompilerError::symboltable(SymbolTableError::WrongSymbol {
                     name: name.clone(),
-                    stype: SymbolType::Fn,
-                    prop: SymbolProp::Binding,
+                    stype: SymbolType::Var,
+                    prop: SymbolProp::Param,
                 }))
             }
         }
@@ -114,6 +117,36 @@ impl Symbol {
     pub fn get_flabel(&self) -> Result<usize, CompilerError> {
         match self {
             Symbol::Fn { flabel, .. } => Ok(*flabel),
+            Self::GVar { name, .. } | Self::LVar { name, .. } => {
+                Err(CompilerError::symboltable(SymbolTableError::WrongSymbol {
+                    name: name.clone(),
+                    stype: SymbolType::Var,
+                    prop: SymbolProp::Flabel,
+                }))
+            }
+        }
+    }
+
+    pub fn is_fn_defined(&self) -> Result<bool, CompilerError> {
+        match self {
+            Symbol::Fn {defined, .. } => {
+                Ok(*defined)
+            },
+            Self::GVar { name, .. } | Self::LVar { name, .. } => {
+                Err(CompilerError::symboltable(SymbolTableError::WrongSymbol {
+                    name: name.clone(),
+                    stype: SymbolType::Fn,
+                    prop: SymbolProp::Binding,
+                }))
+            }
+        }
+    }
+
+    pub fn set_fn_defined(&self) -> Result<Self, CompilerError> {
+        match self {
+            Symbol::Fn { name, dtype, params, flabel, .. } => {
+                Ok(Symbol::Fn { name: name.to_string(), dtype: dtype.clone(), params: params.clone(), flabel: *flabel, defined: true })
+            },
             Self::GVar { name, .. } | Self::LVar { name, .. } => {
                 Err(CompilerError::symboltable(SymbolTableError::WrongSymbol {
                     name: name.clone(),

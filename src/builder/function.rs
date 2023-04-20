@@ -13,7 +13,7 @@ use crate::{
     function::{FnDef, ParamList},
 };
 
-use super::symboltable::{append_lvar, get_global_symbol, reset_lst, get_lst_tail};
+use super::symboltable::{append_lvar, get_global_symbol, reset_lst, get_lst_tail, set_fn_defined};
 
 pub fn create_fn(
     rtype: DType,
@@ -41,6 +41,9 @@ pub fn create_fn(
         flabel = symbol
             .get_flabel()
             .map_err(SemanticError::from_compiler(name_span))?;
+        if symbol.is_fn_defined().map_err(SemanticError::from_compiler(span))? {
+            return Err(SemanticError::func(span, FnError::MoreDef { fname: name }));
+        }
     } else {
         decl_params = IndexMap::new();
     }
@@ -144,6 +147,8 @@ pub fn create_fn(
         }
 
         // dbg!(params.clone());
+
+        set_fn_defined(&name).map_err(SemanticError::from_compiler(span))?;
 
         return Ok(FnDef::new(flabel, params.len(), lsize, body));
     }

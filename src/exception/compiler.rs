@@ -186,6 +186,9 @@ impl CompilerError {
                 "Expected {} parameters but found {} parameters in defintion of {}()!",
                 expected, found, fname
             )),
+            FnError::MoreDef { fname } => CompilerError(format!(
+                "Function {}() has multiple definitions!", fname
+            )),
         }
     }
 

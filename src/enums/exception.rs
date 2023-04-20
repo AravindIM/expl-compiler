@@ -55,6 +55,9 @@ pub enum FnError {
         expected: usize,
         found: usize,
     },
+    MoreDef {
+        fname: String,
+    }
 }
 
 pub enum TypeError {

@@ -150,6 +150,7 @@ pub fn append_fn(
             dtype,
             params: params.clone(),
             flabel,
+            defined: false,
         },
     );
     Ok(())
@@ -185,4 +186,13 @@ pub fn dequeue_gst(prim: Primitive) -> Result<(), SemanticError> {
 
 pub fn dequeue_lst(prim: Primitive) -> Result<(), SemanticError> {
     LST.lock().unwrap().dequeue(prim)
+}
+
+pub fn set_fn_defined(name: &String) -> Result<(), CompilerError> {
+    let symbol = GST.lock().unwrap().get(name, SymbolType::Fn)?;
+    GST.lock().unwrap().table.insert(
+        name.clone(),
+        symbol.set_fn_defined()?,
+    );
+    Ok(())
 }
